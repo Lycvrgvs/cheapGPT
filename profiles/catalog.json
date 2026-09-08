@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "0.1.0",
+  "profiles": {
+    "ultracheap": {
+      "id": "ultracheap",
+      "file": "ultracheap.md",
+      "title": "UltraCheap",
+      "account": "ChatGPT Plus",
+      "difficulty": "simple tasks",
+      "root": "Luna xHigh",
+      "planner": "GPT-6 Astra-medium",
+      "reviewer": "GPT-6 Astra-low",
+      "planningMode": "PLANNING MODE: Luna xHigh remains the persistent root and owns the plan; apply the native-subagent contract and spawn and await one GPT-6 Astra-medium child attached to this root task with `fork_turns: \"none\"` and all essential necessary task context, ask it to advise only and never edit, implement, test, or delegate, keep its output concise and denseful, then integrate all its advices into the final plan yourself.",
+      "implementationMode": "IMPLEMENTATION MODE: The same persistent Luna xHigh root implements, tests, debugs, and fixes the existing Astra-medium-informed plan itself; once relevant tests pass, apply the native-subagent contract and spawn and await a fresh native `fork_turns: \"none\"` Astra-low read-only reviewer attached to this root task with all essential necessary review context for `PASS` or actionable defects, then fix and retest yourself and repeat Luna-xHigh → fresh Astra-low review until `PASS`."
+    },
+    "cheap": {
+      "id": "cheap",
+      "file": "cheap.md",
+      "title": "Cheap",
+      "account": "ChatGPT Plus",
+      "difficulty": "medium-hard tasks",
+      "root": "Luna Max",
+      "planner": "GPT-6 Astra-xhigh",
+      "reviewer": "GPT-6 Astra-medium",
+      "planningMode": "PLANNING MODE: Luna Max remains the persistent root and owns the plan; apply the native-subagent contract and spawn and await one GPT-6 Astra-xhigh child attached to this root task with `fork_turns: \"none\"` and all essential necessary task context, ask it to advise only and never edit, implement, test, or delegate, keep its output concise and denseful, then integrate all its advices into the final plan yourself.",
+      "implementationMode": "IMPLEMENTATION MODE: The same persistent Luna Max root implements, tests, debugs, and fixes the existing Astra-xhigh-informed plan itself; once relevant tests pass, apply the native-subagent contract and spawn and await a fresh native `fork_turns: \"none\"` Astra-medium read-only reviewer attached to this root task with all essential necessary review context for `PASS` or actionable defects, then fix and retest yourself and repeat Luna-Max → fresh Astra-medium review until `PASS`."
+    },
+    "cheap-5x": {
+      "id": "cheap-5x",
+      "file": "cheap-5x.md",
+      "title": "Cheap 5x",
+      "account": "ChatGPT Pro 5x",
+      "difficulty": "hardest tasks",
+      "root": "Sol-high",
+      "planner": "GPT-6 Astra-xhigh",
+      "reviewer": "GPT-6 Astra-medium",
+      "planningMode": "PLANNING MODE: Sol-high remains the persistent root and owns the plan; apply the native-subagent contract and spawn and await one GPT-6 Astra-xhigh child attached to this root task with `fork_turns: \"none\"` and all essential necessary task context, ask it to advise only and never edit, implement, test, or delegate, keep its output concise and denseful, then integrate all its advices into the final plan yourself.",
+      "implementationMode": "IMPLEMENTATION MODE: The same persistent Sol-high root implements, tests, debugs, and fixes the existing Astra-xhigh-informed plan itself; once relevant tests pass, apply the native-subagent contract and spawn and await a fresh native `fork_turns: \"none\"` Astra-medium read-only reviewer attached to this root task with all essential necessary review context for `PASS` or actionable defects, then fix and retest yourself and repeat Sol-high → fresh Astra-medium review until `PASS`."
+    },
+    "cheap-20x": {
+      "id": "cheap-20x",
+      "file": "cheap-20x.md",
+      "title": "Cheap 20x",
+      "account": "ChatGPT Pro 20x",
+      "difficulty": "hardest tasks",
+      "root": "gpt-5.6-sol xhigh",
+      "planner": "GPT-6 Astra-xhigh",
+      "reviewer": "GPT-6 Astra-medium",
+      "planningMode": "PLANNING MODE: gpt-5.6-sol xhigh remains the persistent root and owns the plan; apply the native-subagent contract and spawn and await one GPT-6 Astra-xhigh child attached to this root task with `fork_turns: \"none\"` and all essential necessary task context, ask it to advise only and never edit, implement, test, or delegate, keep its output concise and denseful, then integrate all its advices into the final plan yourself.",
+      "implementationMode": "IMPLEMENTATION MODE: The same persistent gpt-5.6-sol xhigh root implements, tests, debugs, and fixes the existing Astra-xhigh-informed plan itself; once relevant tests pass, apply the native-subagent contract and spawn and await a fresh native `fork_turns: \"none\"` Astra-medium read-only reviewer attached to this root task with all essential necessary review context for `PASS` or actionable defects, then fix and retest yourself and repeat gpt-5.6-sol-xhigh → fresh Astra-medium review until `PASS`."
+    }
+  }
+}
