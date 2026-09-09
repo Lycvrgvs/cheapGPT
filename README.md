@@ -83,7 +83,7 @@ Install **exactly one**. They are mutually exclusive.
 1. Install into **this** project (`--project .`). Repeat for every other project.
 2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run.
 3. Set the thread's root model to the profile's required root **before** asking for work. If the running model is wrong, the policy tells the agent to stop and ask you to switch or explicitly approve a substitute root.
-4. For each new feature or debug: first turn is **plan only** (root inspects, Astra advises, root owns the plan, no edits) unless you say otherwise (`skip planning`, `just implement`). Second and later turns implement, test, then Astra-review until `PASS`.
+4. For each new feature or debug: first turn is **plan only** (root inspects, Astra advises with code kernels, root owns the plan and a lean acceptance contract, no edits) unless you say otherwise (`skip planning`, `just implement`). Later turns implement the smallest correct mechanism, test, then Astra-review as `PASS` / `FIX` / `REPLAN` until `PASS`.
 5. Mid-thread root change: tell the new root that the model and loop are changing. It must re-read `AGENTS.md`, recover thread/repo context, and continue the profile's loop on the next turn.
 
 Example thread start after `ultracheap` install:
