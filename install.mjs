@@ -12,7 +12,7 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const PACKAGE_VERSION = "1.1.0";
+export const PACKAGE_VERSION = "1.1.1";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -89,7 +89,7 @@ export function buildManagedBlock(profileId, profileBody) {
     "",
     `Active profile: \`${profileId}\``,
     "",
-    "This CheapGPT policy applies to every user turn in this repository. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute models or reasoning efforts. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
+    "This CheapGPT policy applies to every user turn in this repository. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute the profile's explicitly requested Astra planner/reviewer model or reasoning effort. A preferred root configuration is advisory and must not block the already-running harness/system root. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
     "",
     body,
     "",
@@ -797,6 +797,11 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
     if (state.schemaVersion !== SCHEMA_VERSION) {
       issues.push(`state schemaVersion ${state.schemaVersion} != ${SCHEMA_VERSION}`);
     }
+    if (state.packageVersion && state.packageVersion !== PACKAGE_VERSION) {
+      warnings.push(
+        `installed packageVersion ${state.packageVersion} != ${PACKAGE_VERSION}; run update`
+      );
+    }
     if (!resolveProfileId(state.profile)) issues.push(`unrecognized profile '${state.profile}'`);
     if (state.instructionFile !== "AGENTS.md") {
       issues.push(`instructionFile ${state.instructionFile} is not AGENTS.md`);
@@ -832,6 +837,15 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
     }
     if (hookCounts.recovery !== 1) {
       issues.push(`expected exactly one CheapGPT SessionStart compact recovery hook, found ${hookCounts.recovery}`);
+    }
+    try {
+      const expectedHook = await readFile(path.join(sourceRoot, "hooks", HOOK_SCRIPT_NAME), "utf8");
+      const installedHook = await readTextIfExists(paths.hookScript);
+      if (installedHook != null && sha256(installedHook) !== sha256(expectedHook)) {
+        warnings.push("installed CheapGPT hook script does not match current sources; run update");
+      }
+    } catch {
+      warnings.push("could not compare CheapGPT hook script to current sources");
     }
     warnings.push(
       "project-local Codex hooks run only for trusted projects; AGENTS.md remains authoritative if hooks are skipped"
@@ -915,7 +929,7 @@ async function main() {
       process.stdout.write(`CheapGPT ${result.command} complete (${result.profile || result.action || "ok"})\n`);
       if (result.hookMode === "codex") {
         process.stdout.write(
-          "Hooks installed. Trust this project in Codex and review /hooks so heartbeat and compact recovery can run.\n"
+          "Hooks installed. Trust this project in Codex and re-review /hooks so heartbeat and compact recovery can run. Hook trust is tied to the current hook definition; an update that changes cheapgpt-turn.mjs requires review again.\n"
         );
       }
     }

@@ -39,18 +39,25 @@ function extractManagedBlock(source) {
   return source.slice(start, end + END_MARKER.length);
 }
 
+function turnId(event) {
+  if (!event || typeof event !== "object") return "";
+  const value = event.turn_id ?? event.turnId;
+  return value == null ? "" : String(value);
+}
+
 function heartbeatContext(state, event) {
   const sha = String(state.managedBlockSha256 || "").slice(0, 16);
   const model = event && event.model ? String(event.model) : "";
+  const id = turnId(event) || "unknown";
   const lines = [
-    `CHEAPGPT ACTIVE: profile=${state.profile} root="${state.root}" planner="${state.planner}" reviewer="${state.reviewer}" sha=${sha}. Apply the repository CheapGPT orchestration policy to this turn. If the current managed block is unavailable in active context, recover it from AGENTS.md before planning, delegation, or implementation.`,
+    `CHEAPGPT HEARTBEAT: hook executed for current turn_id=${id}. CHEAPGPT ACTIVE: profile=${state.profile} preferred_root="${state.root}" planner="${state.planner}" reviewer="${state.reviewer}" sha=${sha}. Apply the repository CheapGPT orchestration policy to this turn. If the current managed block is unavailable in active context, recover it from AGENTS.md before planning, delegation, or implementation. If asked whether the CheapGPT hook executed for this turn, this heartbeat is direct runtime evidence. Confirm it without falling back to "I cannot verify whether Codex ran the hook."`,
     state.planningMode,
     state.implementationMode,
     "Default this turn: if the user started a new feature or debug and no durable plan exists, stay in PLANNING MODE (plan-only, no edits) unless they overrode; if a durable plan already exists for this task, use IMPLEMENTATION MODE.",
   ];
   if (model) {
     lines.push(
-      `Active Codex model slug reported by the harness: ${model}. Required persistent root: ${state.root}. If this slug is not that root, stop and ask the user to switch or approve a substitute root before spawning Astra or implementing.`
+      `Harness model slug: ${model}. Preferred profile root: ${state.root}. The harness/system model identity is authoritative; the profile root is advisory. Continue with the current root and do not request substitute-root approval solely because the labels differ.`
     );
   }
   return lines.filter(Boolean).join("\n");
@@ -58,7 +65,7 @@ function heartbeatContext(state, event) {
 
 function recoveryContext(state, block) {
   const parts = [
-    "CHEAPGPT RECOVERY after compaction. Rehydrate and follow this exact managed CheapGPT policy before planning, delegation, or implementation.",
+    "CHEAPGPT RECOVERY: SessionStart source=compact succeeded. Rehydrate and follow this exact managed CheapGPT policy before planning, delegation, or implementation.",
     block,
     state.planningMode,
     state.implementationMode,
@@ -69,6 +76,16 @@ function recoveryContext(state, block) {
 
 function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
+}
+
+function emitContext(hookEventName, additionalContext) {
+  emit({
+    continue: true,
+    hookSpecificOutput: {
+      hookEventName,
+      additionalContext,
+    },
+  });
 }
 
 function failSafe(message) {
@@ -121,17 +138,11 @@ async function main() {
       failSafe("CheapGPT recovery: managed AGENTS.md block missing or malformed; run `node install.mjs doctor --project .`.");
       return;
     }
-    emit({
-      continue: true,
-      additionalContext: recoveryContext(state, block),
-    });
+    emitContext("SessionStart", recoveryContext(state, block));
     return;
   }
 
-  emit({
-    continue: true,
-    additionalContext: heartbeatContext(state, event),
-  });
+  emitContext("UserPromptSubmit", heartbeatContext(state, event));
 }
 
 main().catch(() => {

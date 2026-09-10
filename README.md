@@ -16,17 +16,29 @@ If a human asked you to install CheapGPT into the **current** project:
 4. Run the installer with Node 18+ from the **target project** as `--project`:
 
 ```bash
-node /path/to/cheapGPT/install.mjs --project . --profile ultracheap
+node /path/to/cheapGPT/install.mjs install --project . --profile ultracheap
 ```
 
 Windows PowerShell:
 
 ```powershell
-node C:\path\to\cheapGPT\install.mjs --project . --profile ultracheap
+node C:\path\to\cheapGPT\install.mjs install --project . --profile ultracheap
 ```
 
 5. Do not edit `AGENTS.md` yourself to insert the prompt. Do not install more than one profile. Do not dump all profiles into context.
-6. After install, tell the human: trust this project in Codex, review `/hooks`, select the profile's required root model, then start a **plan-only** first turn unless they overrode that.
+6. After install, tell the human: trust this project in Codex, review `/hooks`, optionally select the profile's preferred root, then start a **plan-only** first turn unless they overrode that. An already-running Codex root continues if it differs.
+
+### Update an existing CheapGPT install
+
+If this project already has a CheapGPT managed block or `.cheapgpt/state.json`, do **not** copy new prompt text by hand. CheapGPT has no separate schema migrator: `update` replaces only CheapGPT-owned files (the managed `AGENTS.md` block, `.cheapgpt/state.json`, and CheapGPT hook entries/script) and preserves user-owned instructions outside the markers. There is no user-owned payload inside the CheapGPT block.
+
+```bash
+node /path/to/cheapGPT/install.mjs update --project . --dry-run
+node /path/to/cheapGPT/install.mjs update --project .
+node /path/to/cheapGPT/install.mjs doctor --project .
+```
+
+Stop before writing if markers are malformed or `update` reports a hand-modified managed block (review, then `--force` only if intended). After a successful update, tell the human to re-review/trust `/hooks` because the hook definition hash changed, then start a fresh turn. `doctor` validates installed files against this checkout; it is not evidence that Codex executed a heartbeat on a given turn.
 
 Sibling checkout example (CheapGPT next to the app):
 
@@ -69,20 +81,20 @@ AGENTS.md                         # bounded CheapGPT block appended or replaced
 
 Install **exactly one**. They are mutually exclusive.
 
-| Profile | Account | Use when | Persistent root | Plan advisor | Reviewer |
+| Profile | Account | Use when | Preferred root | Plan advisor | Reviewer |
 | --- | --- | --- | --- | --- | --- |
 | `ultracheap` | ChatGPT Plus | Simple tasks | Luna xHigh | Astra-medium | Astra-low |
 | `cheap` | ChatGPT Plus | Medium-hard tasks | Luna Max | Astra-xhigh | Astra-medium |
 | `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | Sol-high | Astra-xhigh | Astra-medium |
 | `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | gpt-5.6-sol xhigh | Astra-xhigh | Astra-medium |
 
-`cheap-5x` and `cheap-20x` use Sol as root because Sol is stronger at implementing than Luna; Astra still plans and reviews. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
+Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution: if the already-running root differs, work continues without a switch or substitute-root approval. Astra planner/reviewer model and reasoning effort stay as specified. `cheap-5x` and `cheap-20x` prefer Sol because Sol is stronger at implementing than Luna. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
 
 ## How to use it in a repo / thread
 
 1. Install into **this** project (`--project .`). Repeat for every other project.
-2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run.
-3. Set the thread's root model to the profile's required root **before** asking for work. If the running model is wrong, the policy tells the agent to stop and ask you to switch or explicitly approve a substitute root.
+2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run. Project-local hooks only execute for trusted projects; changing the hook file requires re-reviewing it. `doctor` checks installed files only — it is not evidence that Codex Desktop executed a hook on a given turn. Runtime evidence is a `CHEAPGPT HEARTBEAT` received for that turn's `turn_id`.
+3. Optionally set the thread to the profile's preferred root. If the running Codex root differs (including a generic system identity), CheapGPT continues with the current root and does not stop for a switch or substitute approval.
 4. For each new feature or debug: first turn is **plan only** (root inspects, Astra advises with code kernels, root owns the plan and a lean acceptance contract, no edits) unless you say otherwise (`skip planning`, `just implement`). Later turns implement the smallest correct mechanism, test, then Astra-review as `PASS` / `FIX` / `REPLAN` until `PASS`.
 5. Mid-thread root change: tell the new root that the model and loop are changing. It must re-read `AGENTS.md`, recover thread/repo context, and continue the profile's loop on the next turn.
 

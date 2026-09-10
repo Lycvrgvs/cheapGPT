@@ -151,14 +151,14 @@ test("modified managed block fails doctor and update unless --force", async () =
     await cli(dir, ["install", "--profile", "ultracheap"]);
     const agentsPath = path.join(dir, "AGENTS.md");
     const agents = await readFile(agentsPath, "utf8");
-    await writeFile(agentsPath, agents.replace("Luna xHigh root orchestrator", "TAMPERED root orchestrator"));
+    await writeFile(agentsPath, agents.replace("Preferred-root guidance", "TAMPERED-root guidance"));
     const doctor = await cli(dir, ["doctor"]);
     assert.equal(doctor.ok, false);
     await assert.rejects(() => cli(dir, ["update"]), /modified by hand/);
     const forced = await cli(dir, ["update", "--force"]);
     assert.equal(forced.ok, true);
     const restored = await readFile(agentsPath, "utf8");
-    assert.match(restored, /Luna xHigh root orchestrator/);
+    assert.match(restored, /Preferred-root guidance/);
     assert.doesNotMatch(restored, /TAMPERED/);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -321,29 +321,40 @@ function runHook(cwd, payload) {
   });
 }
 
-test("heartbeat hook output is tiny and reads current state from disk", async () => {
+test("heartbeat hook uses nested Codex contract and includes turn_id", async () => {
   const dir = await tempDir();
   try {
     await cli(dir, ["install", "--profile", "ultracheap"]);
     const result = await runHook(dir, {
       hook_event_name: "UserPromptSubmit",
       cwd: dir,
-      model: "luna-max",
+      model: "gpt-5-based-codex",
+      turn_id: "turn-abc-123",
     });
     assert.equal(result.code, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(typeof payload.additionalContext, "string");
-    assert.match(payload.additionalContext, /CHEAPGPT ACTIVE: profile=ultracheap/);
-    assert.match(payload.additionalContext, /PLANNING MODE:/);
-    assert.match(payload.additionalContext, /IMPLEMENTATION MODE:/);
-    assert.ok(payload.additionalContext.length < 4000);
-    assert.doesNotMatch(payload.additionalContext, /You are the persistent Luna xHigh root orchestrator/);
+    assert.equal(payload.additionalContext, undefined);
+    assert.equal(payload.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+    const ctx = payload.hookSpecificOutput.additionalContext;
+    assert.equal(typeof ctx, "string");
+    assert.match(ctx, /CHEAPGPT HEARTBEAT: hook executed for current turn_id=turn-abc-123/);
+    assert.match(ctx, /CHEAPGPT ACTIVE: profile=ultracheap/);
+    assert.match(ctx, /Preferred profile root: Luna xHigh/);
+    assert.match(ctx, /PLANNING MODE:/);
+    assert.match(ctx, /IMPLEMENTATION MODE:/);
+    assert.ok(ctx.length < 5000);
+    assert.doesNotMatch(ctx, /You are the persistent Luna xHigh root orchestrator/);
+    assert.doesNotMatch(ctx, /stop and ask the user to switch/);
+    assert.doesNotMatch(ctx, /remain idle/);
+    assert.doesNotMatch(ctx, /If this slug is not that root/);
+    assert.doesNotMatch(ctx, /do not spawn Astra/);
+    assert.match(ctx, /do not request substitute-root approval/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("compact recovery emits the full current managed block", async () => {
+test("compact recovery uses nested SessionStart contract and rehydrates the managed block", async () => {
   const dir = await tempDir();
   try {
     await cli(dir, ["install", "--profile", "cheap"]);
@@ -356,9 +367,12 @@ test("compact recovery emits the full current managed block", async () => {
     });
     assert.equal(result.code, 0);
     const payload = JSON.parse(result.stdout);
-    assert.match(payload.additionalContext, /CHEAPGPT RECOVERY/);
-    assert.ok(payload.additionalContext.includes(block.trim()));
-    assert.match(payload.additionalContext, /Luna Max/);
+    assert.equal(payload.additionalContext, undefined);
+    assert.equal(payload.hookSpecificOutput.hookEventName, "SessionStart");
+    const ctx = payload.hookSpecificOutput.additionalContext;
+    assert.match(ctx, /CHEAPGPT RECOVERY: SessionStart source=compact succeeded/);
+    assert.ok(ctx.includes(block.trim()));
+    assert.match(ctx, /Luna Max/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -384,4 +398,34 @@ test("malformed CheapGPT state fails safely without blocking", async () => {
 
 test("mergeCheapgptHooks refuses malformed hooks.json", () => {
   assert.throws(() => mergeCheapgptHooks("{bad", true), /not valid JSON/);
+});
+
+test("profiles have preferred-root guidance and no blocking root-identity gate", async () => {
+  for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
+    const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
+    assert.match(text, /Preferred-root guidance:/);
+    assert.doesNotMatch(text, /Required-root check:/);
+    assert.doesNotMatch(text, /do not spawn Astra and do not implement/);
+    assert.doesNotMatch(text, /remain idle except/);
+    assert.doesNotMatch(text, /Until they switch or approve/);
+    assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol)/);
+  }
+});
+
+test("doctor warns when installed packageVersion or hook script is stale", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "ultracheap"]);
+    const statePath = path.join(dir, ".cheapgpt", "state.json");
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    state.packageVersion = "1.1.0";
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`);
+    await writeFile(path.join(dir, ".codex", "hooks", "cheapgpt-turn.mjs"), "export default 'stale';\n");
+    const doctor = await cli(dir, ["doctor"]);
+    assert.equal(doctor.ok, true);
+    assert.ok(doctor.warnings.some((w) => /packageVersion 1\.1\.0/.test(w)));
+    assert.ok(doctor.warnings.some((w) => /hook script does not match current sources/.test(w)));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
