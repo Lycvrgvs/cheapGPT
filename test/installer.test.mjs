@@ -403,6 +403,7 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
 test("profiles have preferred-root guidance and no blocking root-identity gate", async () => {
   for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
+    assert.match(text, /never trade relevant context for token efficiency/);
     assert.match(text, /Preferred-root guidance:/);
     assert.doesNotMatch(text, /Required-root check:/);
     assert.doesNotMatch(text, /do not spawn Astra and do not implement/);
