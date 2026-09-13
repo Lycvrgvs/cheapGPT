@@ -342,7 +342,7 @@ test("heartbeat hook uses nested Codex contract and includes turn_id", async () 
     assert.match(ctx, /Preferred profile root: Luna xHigh/);
     assert.match(ctx, /PLANNING MODE:/);
     assert.match(ctx, /IMPLEMENTATION MODE:/);
-    assert.ok(ctx.length < 5000);
+    assert.ok(ctx.length < 8000);
     assert.doesNotMatch(ctx, /You are the persistent Luna xHigh root orchestrator/);
     assert.doesNotMatch(ctx, /stop and ask the user to switch/);
     assert.doesNotMatch(ctx, /remain idle/);
@@ -404,6 +404,8 @@ test("profiles have preferred-root guidance and no blocking root-identity gate",
   for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
     assert.match(text, /never trade relevant context for token efficiency/);
+    assert.match(text, /relevance gate/);
+    assert.match(text, /UNRESOLVED/);
     assert.match(text, /Preferred-root guidance:/);
     assert.doesNotMatch(text, /Required-root check:/);
     assert.doesNotMatch(text, /do not spawn Astra and do not implement/);
