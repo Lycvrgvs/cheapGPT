@@ -20,6 +20,7 @@ import {
   run,
   sha256,
 } from "../install.mjs";
+import { mergeMultiAgentConfig } from "../codex-config.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const INSTALL = path.join(ROOT, "install.mjs");
@@ -62,6 +63,9 @@ test("empty repository install creates AGENTS.md, one block, state, and doctor p
     const region = extractManagedRegion(agents);
     assert.equal(state.managedBlockSha256, sha256(region.block));
     assert.equal(existsSync(path.join(dir, ".codex", "hooks", "cheapgpt-turn.mjs")), true);
+    const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+    assert.match(toml, /\[features\.multi_agent_v2\]/);
+    assert.match(toml, /default_wait_timeout_ms = 1800000/);
     const doctor = await cli(dir, ["doctor"]);
     assert.equal(doctor.ok, true);
   } finally {
@@ -106,7 +110,7 @@ test("install is idempotent and never duplicates the managed block", async () =>
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
     ["ultracheap", "Luna xHigh", ["Luna Max", "Sol-high", "gpt-5.6-sol xhigh"]],
-    ["cheap", "Luna Max", ["Luna xHigh", "Sol-high", "gpt-5.6-sol xhigh"]],
+    ["cheap", "Luna Max", ["Luna xHigh", "Sol-high", "gpt-5.6-sol xhigh", "Astra-xhigh"]],
     ["cheap-5x", "Sol-high", ["Luna xHigh", "Luna Max", "gpt-5.6-sol xhigh"]],
     ["cheap-20x", "gpt-5.6-sol xhigh", ["Luna xHigh", "Luna Max", "persistent Sol-high"]],
   ];
@@ -342,7 +346,7 @@ test("heartbeat hook uses nested Codex contract and includes turn_id", async () 
     assert.match(ctx, /Preferred profile root: Luna xHigh/);
     assert.match(ctx, /PLANNING MODE:/);
     assert.match(ctx, /IMPLEMENTATION MODE:/);
-    assert.ok(ctx.length < 8000);
+    assert.ok(ctx.length < 15000);
     assert.doesNotMatch(ctx, /You are the persistent Luna xHigh root orchestrator/);
     assert.doesNotMatch(ctx, /stop and ask the user to switch/);
     assert.doesNotMatch(ctx, /remain idle/);
@@ -431,4 +435,122 @@ test("doctor warns when installed packageVersion or hook script is stale", async
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("existing unrelated Codex config survives outside the CheapGPT TOML block", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    const original = "model = \"gpt-5\"\n\n[mcp_servers.demo]\ncommand = \"echo\"\n";
+    await writeFile(path.join(dir, ".codex", "config.toml"), original);
+    await cli(dir, ["install", "--profile", "ultracheap"]);
+    const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+    assert.match(toml, /model = "gpt-5"/);
+    assert.match(toml, /\[mcp_servers\.demo\]/);
+    assert.match(toml, /cheapgpt:multi-agent-v2:start/);
+    assert.equal(toml.split("[features.multi_agent_v2]").length - 1, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("existing matching multi-agent values stay user-owned and are not duplicated", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".codex", "config.toml"),
+      `[features.multi_agent_v2]
+enabled = true
+wait_agent_enabled = true
+expose_spawn_agent_model_overrides = true
+min_wait_timeout_ms = 60000
+default_wait_timeout_ms = 1800000
+max_wait_timeout_ms = 3600000
+`
+    );
+    await cli(dir, ["install", "--profile", "cheap", "--no-hooks"]);
+    const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+    assert.equal((toml.match(/^\s*enabled = true\s*$/gm) || []).length, 1);
+    assert.doesNotMatch(toml, /cheapgpt:multi-agent-v2:start/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("existing table receives only missing keys without a duplicate table", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".codex", "config.toml"),
+      `[features.multi_agent_v2]
+enabled = true
+`
+    );
+    await cli(dir, ["install", "--profile", "cheap-5x"]);
+    const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+    assert.equal(toml.split("[features.multi_agent_v2]").length - 1, 1);
+    assert.match(toml, /wait_agent_enabled = true/);
+    assert.match(toml, /cheapgpt:multi-agent-v2:start/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("conflicting multi-agent values fail without rewriting config", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    const original = "[features.multi_agent_v2]\nenabled = false\n";
+    await writeFile(path.join(dir, ".codex", "config.toml"), original);
+    await assert.rejects(() => cli(dir, ["install", "--profile", "ultracheap"]), /config conflict/);
+    assert.equal(await readFile(path.join(dir, ".codex", "config.toml"), "utf8"), original);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uninstall removes only CheapGPT TOML and dry-run does not touch config", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(path.join(dir, ".codex", "config.toml"), "keep = true\n");
+    const dry = await cli(dir, ["install", "--profile", "ultracheap", "--dry-run"]);
+    assert.equal(await readFile(path.join(dir, ".codex", "config.toml"), "utf8"), "keep = true\n");
+    assert.ok(dry.writes.includes(".codex/config.toml"));
+    await cli(dir, ["install", "--profile", "ultracheap"]);
+    await cli(dir, ["uninstall"]);
+    const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+    assert.match(toml, /keep = true/);
+    assert.doesNotMatch(toml, /cheapgpt:multi-agent-v2/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("transaction failure restores original Codex config", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(path.join(dir, ".codex", "config.toml"), "keep = 1\n");
+    const previous = process.env.CHEAPGPT_FAIL_AFTER;
+    process.env.CHEAPGPT_FAIL_AFTER = "state";
+    try {
+      await assert.rejects(() => cli(dir, ["install", "--profile", "ultracheap"]), /induced failure/);
+    } finally {
+      if (previous == null) delete process.env.CHEAPGPT_FAIL_AFTER;
+      else process.env.CHEAPGPT_FAIL_AFTER = previous;
+    }
+    assert.equal(await readFile(path.join(dir, ".codex", "config.toml"), "utf8"), "keep = 1\n");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("mergeMultiAgentConfig refuses dotted keys", () => {
+  assert.throws(
+    () => mergeMultiAgentConfig("features.multi_agent_v2.enabled = true\n"),
+    /dotted-key/
+  );
 });

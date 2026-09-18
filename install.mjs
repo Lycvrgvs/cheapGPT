@@ -12,7 +12,13 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const PACKAGE_VERSION = "1.3.0";
+import {
+  doctorCodexConfig,
+  mergeMultiAgentConfig,
+  removeMultiAgentConfig,
+} from "./codex-config.mjs";
+
+export const PACKAGE_VERSION = "1.4.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -206,6 +212,7 @@ function projectPaths(projectRoot) {
     hooksDir: path.join(projectRoot, ".codex", "hooks"),
     hooksJson: path.join(projectRoot, ".codex", "hooks.json"),
     hookScript: path.join(projectRoot, ".codex", "hooks", HOOK_SCRIPT_NAME),
+    codexConfig: path.join(projectRoot, ".codex", "config.toml"),
   };
 }
 
@@ -411,6 +418,13 @@ function buildState({
       hookScript: Boolean(created?.hookScript),
       stateDir: Boolean(created?.stateDir),
       codexDir: Boolean(created?.codexDir),
+      codexConfig: Boolean(created?.codexConfig),
+      tomlTable: Boolean(created?.tomlTable),
+    },
+    toml: {
+      createdFile: Boolean(created?.codexConfig),
+      createdTable: Boolean(created?.tomlTable),
+      managedKeys: created?.tomlManagedKeys || [],
     },
   };
 }
@@ -538,11 +552,13 @@ async function inspectProject(paths) {
   const agents = await readTextIfExists(paths.agents);
   const state = await readState(paths);
   const hooksJson = await readTextIfExists(paths.hooksJson);
+  const codexConfig = await readTextIfExists(paths.codexConfig);
   const region = extractManagedRegion(agents || "");
   return {
     agents,
     state,
     hooksJson,
+    codexConfig,
     region,
     hasAgents: agents != null,
     hasState: state != null,
@@ -550,6 +566,7 @@ async function inspectProject(paths) {
     hasCodexDir: existsSync(paths.codexDir),
     hasStateDir: existsSync(paths.stateDir),
     hasHookScript: existsSync(paths.hookScript),
+    hasCodexConfig: codexConfig != null,
   };
 }
 
@@ -582,12 +599,21 @@ async function writeInstallation({
 }) {
   const managedBlock = buildManagedBlock(profile.id, profile.body);
   const nextAgents = applyManagedBlock(inspect.agents || "", managedBlock);
+  let tomlMerge;
+  try {
+    tomlMerge = mergeMultiAgentConfig(inspect.codexConfig);
+  } catch (err) {
+    throw new CheapgptError(err.message, err.code || "TOML");
+  }
   const created = {
     agents: !inspect.hasAgents,
     hooksJson: hookMode === "codex" && !inspect.hasHooksJson,
     hookScript: hookMode === "codex" && !inspect.hasHookScript,
     stateDir: !inspect.hasStateDir,
-    codexDir: hookMode === "codex" && !inspect.hasCodexDir,
+    codexDir: (hookMode === "codex" || true) && !inspect.hasCodexDir,
+    codexConfig: !inspect.hasCodexConfig && tomlMerge.createdFile,
+    tomlTable: inspect.state?.created?.tomlTable || tomlMerge.createdTable,
+    tomlManagedKeys: tomlMerge.managedKeys,
   };
   const nextState = buildState({
     profile,
@@ -598,7 +624,10 @@ async function writeInstallation({
       hooksJson: hookMode === "codex" && (inspect.state?.created?.hooksJson || created.hooksJson),
       hookScript: hookMode === "codex" && (inspect.state?.created?.hookScript || created.hookScript),
       stateDir: inspect.state?.created?.stateDir || created.stateDir,
-      codexDir: hookMode === "codex" && (inspect.state?.created?.codexDir || created.codexDir),
+      codexDir: inspect.state?.created?.codexDir || created.codexDir,
+      codexConfig: inspect.state?.created?.codexConfig || created.codexConfig,
+      tomlTable: created.tomlTable,
+      tomlManagedKeys: created.tomlManagedKeys,
     },
     previous: inspect.state,
   });
@@ -615,7 +644,7 @@ async function writeInstallation({
     instructionFile: "AGENTS.md",
     hookMode,
     managedBlockSha256: nextState.managedBlockSha256,
-    writes: ["AGENTS.md", ".cheapgpt/state.json"],
+    writes: ["AGENTS.md", ".cheapgpt/state.json", ".codex/config.toml"],
   };
   if (hookMode === "codex") {
     planned.writes.push(".codex/hooks.json", `.codex/hooks/${HOOK_SCRIPT_NAME}`);
@@ -636,11 +665,15 @@ async function writeInstallation({
       paths.hookScript,
       inspect.hasHookScript ? await readTextIfExists(paths.hookScript) : null
     ),
+    snapshotFile(paths.codexConfig, inspect.codexConfig),
   ];
 
   try {
     await atomicWrite(paths.agents, nextAgents);
     await maybeFail("agents");
+    await mkdir(paths.codexDir, { recursive: true });
+    await atomicWrite(paths.codexConfig, tomlMerge.text);
+    await maybeFail("config");
     if (hookMode === "codex") {
       await mkdir(paths.hooksDir, { recursive: true });
       await copyFile(hookSource, paths.hookScript);
@@ -736,6 +769,7 @@ async function cmdUninstall(args) {
   if (inspect.hasAgents) planned.writes.push("AGENTS.md");
   if (inspect.hasHookScript) planned.removes.push(`.codex/hooks/${HOOK_SCRIPT_NAME}`);
   if (inspect.hasHooksJson) planned.writes.push(".codex/hooks.json");
+  if (inspect.hasCodexConfig || inspect.state?.toml) planned.writes.push(".codex/config.toml");
 
   if (args.dryRun) {
     return { dryRun: true, action: "uninstall", ...planned };
@@ -749,6 +783,7 @@ async function cmdUninstall(args) {
       paths.hookScript,
       inspect.hasHookScript ? await readTextIfExists(paths.hookScript) : null
     ),
+    snapshotFile(paths.codexConfig, inspect.codexConfig),
   ];
 
   try {
@@ -767,6 +802,22 @@ async function cmdUninstall(args) {
         inspect.state?.created?.hooksJson;
       if (empty) await rm(paths.hooksJson, { force: true });
       else await atomicWrite(paths.hooksJson, nextHooksJson);
+    }
+    if (inspect.hasCodexConfig || inspect.state?.toml || inspect.state?.created?.codexConfig) {
+      let removed;
+      try {
+        removed = removeMultiAgentConfig(inspect.codexConfig, {
+          createdFile: inspect.state?.created?.codexConfig || inspect.state?.toml?.createdFile,
+          createdTable: inspect.state?.created?.tomlTable || inspect.state?.toml?.createdTable,
+        });
+      } catch (err) {
+        throw new CheapgptError(err.message, err.code || "TOML");
+      }
+      if (removed.deleteFile || !String(removed.text || "").trim()) {
+        await rm(paths.codexConfig, { force: true });
+      } else {
+        await atomicWrite(paths.codexConfig, removed.text);
+      }
     }
     await maybeFail("state");
     await rm(paths.state, { force: true });
@@ -827,6 +878,13 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
       }
     }
   }
+
+  const tomlDoctor = doctorCodexConfig(inspect.codexConfig, {
+    createdFile: state?.created?.codexConfig || state?.toml?.createdFile,
+    createdTable: state?.created?.tomlTable || state?.toml?.createdTable,
+  });
+  issues.push(...tomlDoctor.issues);
+  warnings.push(...tomlDoctor.warnings);
 
   const hookCounts = cheapgptHookCount(inspect.hooksJson);
   if (state?.hookMode === "codex") {
