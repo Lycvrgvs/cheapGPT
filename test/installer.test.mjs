@@ -53,9 +53,10 @@ test("empty repository install creates AGENTS.md, one block, state, and doctor p
     const profile = await loadProfile("ultracheap", ROOT);
     const inner = extractProfileFromBlock(agents, "ultracheap");
     assert.equal(inner, profile.body.trim());
-    assert.match(agents, /Luna xHigh/);
-    assert.doesNotMatch(agents, /Luna Max/);
-    assert.doesNotMatch(agents, /Sol-high/);
+    assert.match(agents, /luna-6-max/);
+    assert.doesNotMatch(agents, /sol-6-high/);
+    assert.doesNotMatch(agents, /sol-6-xhigh/);
+    assert.doesNotMatch(agents, /sol-6-max/);
     assert.doesNotMatch(agents, /gpt-5\.6-sol xhigh/);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
     assert.equal(state.profile, "ultracheap");
@@ -81,7 +82,7 @@ test("existing AGENTS.md user instructions survive installation", async () => {
     await cli(dir, ["install", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Run npm test before completion\./);
-    assert.match(agents, /Luna Max/);
+    assert.match(agents, /sol-6-high/);
     assert.ok(agents.startsWith("# Repository Rules"));
     const markers = countMarkers(agents);
     assert.equal(markers.start, 1);
@@ -109,10 +110,10 @@ test("install is idempotent and never duplicates the managed block", async () =>
 
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
-    ["ultracheap", "Luna xHigh", ["Luna Max", "Sol-high", "gpt-5.6-sol xhigh"]],
-    ["cheap", "Luna Max", ["Luna xHigh", "Sol-high", "gpt-5.6-sol xhigh", "Astra-xhigh"]],
-    ["cheap-5x", "Sol-high", ["Luna xHigh", "Luna Max", "gpt-5.6-sol xhigh"]],
-    ["cheap-20x", "gpt-5.6-sol xhigh", ["Luna xHigh", "Luna Max", "persistent Sol-high"]],
+    ["ultracheap", "luna-6-max", ["sol-6-high", "sol-6-xhigh", "sol-6-max"]],
+    ["cheap", "sol-6-high", ["luna-6-max", "sol-6-xhigh", "sol-6-max", "Astra-xhigh"]],
+    ["cheap-5x", "sol-6-xhigh", ["luna-6-max", "sol-6-high", "sol-6-max"]],
+    ["cheap-20x", "sol-6-max", ["luna-6-max", "sol-6-high", "sol-6-xhigh"]],
   ];
   for (const [profile, unique, absent] of cases) {
     const dir = await tempDir();
@@ -139,8 +140,8 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     await cli(dir, ["update", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Keep me\./);
-    assert.match(agents, /Luna Max/);
-    assert.doesNotMatch(agents, /Luna xHigh/);
+    assert.match(agents, /sol-6-high/);
+    assert.doesNotMatch(agents, /luna-6-max/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
     assert.equal(state.profile, "cheap");
@@ -343,7 +344,7 @@ test("heartbeat hook uses nested Codex contract and includes turn_id", async () 
     assert.equal(typeof ctx, "string");
     assert.match(ctx, /CHEAPGPT HEARTBEAT: hook executed for current turn_id=turn-abc-123/);
     assert.match(ctx, /CHEAPGPT ACTIVE: profile=ultracheap/);
-    assert.match(ctx, /Preferred profile root: Luna xHigh/);
+    assert.match(ctx, /Preferred profile root: luna-6-max/);
     assert.match(ctx, /PLANNING MODE:/);
     assert.match(ctx, /IMPLEMENTATION MODE:/);
     assert.ok(ctx.length < 15000);
@@ -376,7 +377,7 @@ test("compact recovery uses nested SessionStart contract and rehydrates the mana
     const ctx = payload.hookSpecificOutput.additionalContext;
     assert.match(ctx, /CHEAPGPT RECOVERY: SessionStart source=compact succeeded/);
     assert.ok(ctx.includes(block.trim()));
-    assert.match(ctx, /Luna Max/);
+    assert.match(ctx, /sol-6-high/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -415,7 +416,7 @@ test("profiles have preferred-root guidance and no blocking root-identity gate",
     assert.doesNotMatch(text, /do not spawn Astra and do not implement/);
     assert.doesNotMatch(text, /remain idle except/);
     assert.doesNotMatch(text, /Until they switch or approve/);
-    assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol)/);
+    assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol|luna-6|sol-6)/);
   }
 });
 

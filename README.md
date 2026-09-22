@@ -84,10 +84,10 @@ Install **exactly one**. They are mutually exclusive.
 
 | Profile | Account | Use when | Preferred root | Plan advisor | Reviewer | Astra board budget |
 | --- | --- | --- | --- | --- | --- | ---: |
-| `ultracheap` | ChatGPT Plus | Simple tasks | Luna xHigh | Astra-medium | Astra-low | 5,000 |
-| `cheap` | ChatGPT Plus | Medium-hard tasks | Luna Max | Astra-medium | Astra-medium | 10,000 |
-| `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | Sol-high | Astra-xhigh | Astra-medium | 15,000 |
-| `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | gpt-5.6-sol xhigh | Astra-xhigh | Astra-medium | 20,000 |
+| `ultracheap` | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | Astra-medium | Astra-low | 5,000 |
+| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6-high (`gpt-6-sol` high) | Astra-medium | Astra-medium | 10,000 |
+| `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | sol-6-xhigh (`gpt-6-sol` xhigh) | Astra-xhigh | Astra-medium | 15,000 |
+| `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | sol-6-max (`gpt-6-sol` max) | Astra-xhigh | Astra-medium | 20,000 |
 
 Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution: if the already-running root differs, work continues without a switch or substitute-root approval. Astra planner/reviewer model and reasoning effort stay as specified. `cheap-5x` and `cheap-20x` prefer Sol because Sol is stronger at implementing than Luna. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
 
@@ -109,7 +109,7 @@ Example override:
 
 Example mid-thread switch after installing `cheap-5x` into the same project:
 
-> We are changing the root to Sol-high and the CheapGPT cheap-5x loop. Read AGENTS.md and prior context, then continue next turn.
+> We are changing the root to sol-6-xhigh (`gpt-6-sol` xhigh) and the CheapGPT cheap-5x loop. Read AGENTS.md and prior context, then continue next turn.
 
 ## Install / update / doctor / uninstall
 
