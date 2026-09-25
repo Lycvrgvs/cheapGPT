@@ -111,9 +111,9 @@ test("install is idempotent and never duplicates the managed block", async () =>
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
     ["ultracheap", "luna-6-max", ["sol-6-high", "sol-6-xhigh", "sol-6-max"]],
-    ["cheap", "sol-6-high", ["luna-6-max", "sol-6-xhigh", "sol-6-max", "Astra-xhigh"]],
-    ["cheap-5x", "sol-6-xhigh", ["luna-6-max", "sol-6-high", "sol-6-max"]],
-    ["cheap-20x", "sol-6-max", ["luna-6-max", "sol-6-high", "sol-6-xhigh"]],
+    ["cheap", "sol-6-high", ["sol-6-xhigh", "sol-6-max", "Astra-xhigh"]],
+    ["cheap-5x", "sol-6-xhigh", ["sol-6-high", "sol-6-max"]],
+    ["cheap-20x", "sol-6-max", ["sol-6-high", "sol-6-xhigh"]],
   ];
   for (const [profile, unique, absent] of cases) {
     const dir = await tempDir();
@@ -141,7 +141,8 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Keep me\./);
     assert.match(agents, /sol-6-high/);
-    assert.doesNotMatch(agents, /luna-6-max/);
+    assert.match(agents, /luna-6-max implements spec-bound/);
+    assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
     assert.equal(state.profile, "cheap");
@@ -347,7 +348,7 @@ test("heartbeat hook uses nested Codex contract and includes turn_id", async () 
     assert.match(ctx, /Preferred profile root: luna-6-max/);
     assert.match(ctx, /PLANNING MODE:/);
     assert.match(ctx, /IMPLEMENTATION MODE:/);
-    assert.ok(ctx.length < 15000);
+    assert.ok(ctx.length < 20000);
     assert.doesNotMatch(ctx, /You are the persistent Luna xHigh root orchestrator/);
     assert.doesNotMatch(ctx, /stop and ask the user to switch/);
     assert.doesNotMatch(ctx, /remain idle/);

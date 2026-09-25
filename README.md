@@ -85,7 +85,7 @@ Install **exactly one**. They are mutually exclusive.
 | Profile | Account | Use when | Preferred root | Plan advisor | Reviewer | Astra board budget |
 | --- | --- | --- | --- | --- | --- | ---: |
 | `ultracheap` | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | Astra-medium | Astra-low | 5,000 |
-| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6-high (`gpt-6-sol` high) | Astra-medium | Astra-medium | 10,000 |
+| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6-high (`gpt-6-sol` high) | Astra-medium | Astra-low | 10,000 |
 | `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | sol-6-xhigh (`gpt-6-sol` xhigh) | Astra-xhigh | Astra-medium | 15,000 |
 | `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | sol-6-max (`gpt-6-sol` max) | Astra-xhigh | Astra-medium | 20,000 |
 
@@ -96,7 +96,7 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
 1. Install into **this** project (`--project .`). Repeat for every other project.
 2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run. Project-local hooks only execute for trusted projects; changing the hook file requires re-reviewing it. `doctor` checks installed files only — it is not evidence that Codex Desktop executed a hook on a given turn. Runtime evidence is a `CHEAPGPT HEARTBEAT` received for that turn's `turn_id`.
 3. Optionally set the thread to the profile's preferred root. If the running Codex root differs (including a generic system identity), CheapGPT continues with the current root and does not stop for a switch or substitute approval.
-4. For each new feature or debug: first turn is **plan only**. The root creates/clears `cheapgpt/plan.md`, spawns Astra, then immediately `wait_agent(timeout_ms=1800000)` (re-enter after timeouts). Astra writes the creative core as real code on the board and mechanical steps as instructions; terminal planner signal is `PLAN_READY cheapgpt/plan.md`. Later turns implement from that board, then first-review `PASS` / `FIX cheapgpt/plan.md` / `REPLAN cheapgpt/plan.md`. `PASS` deletes `cheapgpt/plan.md` and ends. `FIX`/`REPLAN` get one correction, then one terminal final review: `PASS` (delete board) or `UNRESOLVED cheapgpt/plan.md` (keep board). No third reviewer unless you start a new cycle. Project-local `.codex/config.toml` raises the native wait default to 30 minutes as a harness backstop; CheapGPT never writes `~/.codex/config.toml`.
+4. First turn is a `cheapgpt-plan` cycle only unless you override: root creates/clears `cheapgpt/plan.md`, spawns Astra, then `wait_agent(timeout_ms=1800000)`. Later turns implement. On `cheap`, `cheap-5x`, and `cheap-20x` the Sol root keeps judgment-driven work and spawns one `luna-6-max` (`gpt-6-luna` max) child for spec-bound mechanical work, including all required test/spy edits, in the same project and worktree; `ultracheap` implements everything itself. Review is one first pass (`PASS` / `FIX` / `REPLAN`) then, after a correction, one terminal `PASS` or `UNRESOLVED`. `PASS` deletes the board; `UNRESOLVED` keeps it. No third reviewer unless you start a new cycle. Project-local `.codex/config.toml` is the 30-minute wait backstop; CheapGPT never writes `~/.codex`.
 5. Mid-thread root change: tell the new root that the model and loop are changing. It must re-read `AGENTS.md`, recover thread/repo context, and continue the profile's loop on the next turn.
 
 Example thread start after `ultracheap` install:
