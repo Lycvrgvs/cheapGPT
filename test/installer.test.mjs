@@ -82,7 +82,7 @@ test("existing AGENTS.md user instructions survive installation", async () => {
     await cli(dir, ["install", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Run npm test before completion\./);
-    assert.match(agents, /sol-6-high/);
+    assert.match(agents, /sol-6.1-medium/);
     assert.ok(agents.startsWith("# Repository Rules"));
     const markers = countMarkers(agents);
     assert.equal(markers.start, 1);
@@ -110,10 +110,10 @@ test("install is idempotent and never duplicates the managed block", async () =>
 
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
-    ["ultracheap", "luna-6-max", ["sol-6-high", "sol-6-xhigh", "sol-6-max"]],
-    ["cheap", "sol-6-high", ["sol-6-xhigh", "sol-6-max", "Astra-xhigh"]],
-    ["cheap-5x", "sol-6-xhigh", ["sol-6-high", "sol-6-max"]],
-    ["cheap-20x", "sol-6-max", ["sol-6-high", "sol-6-xhigh"]],
+    ["ultracheap", "luna-6-max", ["sol-6.1-medium", "sol-6.1-high", "sol-6.1-xhigh"]],
+    ["cheap", "sol-6.1-medium", ["luna-6-max", "sol-6.1-high", "sol-6.1-xhigh"]],
+    ["cheap-5x", "sol-6.1-high", ["luna-6-max", "sol-6.1-medium", "sol-6.1-xhigh"]],
+    ["cheap-20x", "sol-6.1-xhigh", ["luna-6-max", "sol-6.1-medium", "sol-6.1-high"]],
   ];
   for (const [profile, unique, absent] of cases) {
     const dir = await tempDir();
@@ -140,8 +140,8 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     await cli(dir, ["update", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Keep me\./);
-    assert.match(agents, /sol-6-high/);
-    assert.match(agents, /luna-6-max implements spec-bound/);
+    assert.match(agents, /sol-6.1-medium/);
+    assert.match(agents, /mechanical handoff/);
     assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
@@ -378,7 +378,7 @@ test("compact recovery uses nested SessionStart contract and rehydrates the mana
     const ctx = payload.hookSpecificOutput.additionalContext;
     assert.match(ctx, /CHEAPGPT RECOVERY: SessionStart source=compact succeeded/);
     assert.ok(ctx.includes(block.trim()));
-    assert.match(ctx, /sol-6-high/);
+    assert.match(ctx, /sol-6.1-medium/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -409,7 +409,7 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
 test("profiles have preferred-root guidance and no blocking root-identity gate", async () => {
   for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    assert.match(text, /never trade relevant context for token efficiency/);
+    assert.match(text, /deliberate second pass/);
     assert.match(text, /relevance gate/);
     assert.match(text, /UNRESOLVED/);
     assert.match(text, /Preferred-root guidance:/);
@@ -418,6 +418,19 @@ test("profiles have preferred-root guidance and no blocking root-identity gate",
     assert.doesNotMatch(text, /remain idle except/);
     assert.doesNotMatch(text, /Until they switch or approve/);
     assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol|luna-6|sol-6)/);
+    assert.match(text, /FIX_NO_PLAN_CHANGES/);
+    assert.match(text, /RAPID/);
+  }
+});
+
+test("ultracheap and cheap no longer route through Astra", async () => {
+  for (const id of ["ultracheap", "cheap"]) {
+    const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
+    assert.doesNotMatch(text, /Astra/);
+  }
+  for (const id of ["cheap-5x", "cheap-20x"]) {
+    const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
+    assert.match(text, /gpt-6-astra/);
   }
 });
 

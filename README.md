@@ -82,21 +82,21 @@ AGENTS.md                         # bounded CheapGPT block appended or replaced
 
 Install **exactly one**. They are mutually exclusive.
 
-| Profile | Account | Use when | Preferred root | Plan advisor | Reviewer | Astra board budget |
+| Profile | Account | Use when | Preferred root | Planner | Reviewer | Board budget |
 | --- | --- | --- | --- | --- | --- | ---: |
-| `ultracheap` | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | Astra-medium | Astra-low | 5,000 |
-| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6-high (`gpt-6-sol` high) | Astra-medium | Astra-low | 10,000 |
-| `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | sol-6-xhigh (`gpt-6-sol` xhigh) | Astra-xhigh | Astra-medium | 15,000 |
-| `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | sol-6-max (`gpt-6-sol` max) | Astra-xhigh | Astra-medium | 20,000 |
+| `ultracheap` | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | fresh `gpt-6.1-sol`/medium | fresh `gpt-6-luna`/max ×2 | 5,000 |
+| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | root self-plans; `gpt-6.1-sol`/xhigh on REPLAN | `gpt-6.1-sol`/medium ×2 | 10,000 |
+| `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | sol-6.1-high (`gpt-6.1-sol` high) | root self-plans; `gpt-6-astra`/medium on REPLAN | `gpt-6.1-sol`/high ×2 | 15,000 |
+| `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | root self-plans; `gpt-6-astra`/xhigh on REPLAN | `gpt-6.1-sol`/xhigh ×2 | 20,000 |
 
-Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution: if the already-running root differs, work continues without a switch or substitute-root approval. Astra planner/reviewer model and reasoning effort stay as specified. `cheap-5x` and `cheap-20x` prefer Sol because Sol is stronger at implementing than Luna. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
+Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution: if the already-running root differs, work continues without a switch or substitute-root approval. Planner/reviewer/mechanical model and effort stay as specified. Sol roots own judgment-driven work (architecture, core logic, debugging, contracts); `gpt-6-luna` at `max` does spec-bound mechanical work, including all required test/spy edits. `ultracheap` implements everything itself with its luna root. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
 
 ## How to use it in a repo / thread
 
 1. Install into **this** project (`--project .`). Repeat for every other project.
 2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run. Project-local hooks only execute for trusted projects; changing the hook file requires re-reviewing it. `doctor` checks installed files only — it is not evidence that Codex Desktop executed a hook on a given turn. Runtime evidence is a `CHEAPGPT HEARTBEAT` received for that turn's `turn_id`.
 3. Optionally set the thread to the profile's preferred root. If the running Codex root differs (including a generic system identity), CheapGPT continues with the current root and does not stop for a switch or substitute approval.
-4. First turn is a `cheapgpt-plan` cycle only unless you override: root creates/clears `cheapgpt/plan.md`, spawns Astra, then `wait_agent(timeout_ms=1800000)`. Later turns implement. On `cheap`, `cheap-5x`, and `cheap-20x` the Sol root keeps judgment-driven work and spawns one `luna-6-max` (`gpt-6-luna` max) child for spec-bound mechanical work, including all required test/spy edits, in the same project and worktree; `ultracheap` implements everything itself. Review is one first pass (`PASS` / `FIX` / `REPLAN`) then, after a correction, one terminal `PASS` or `UNRESOLVED`. `PASS` deletes the board; `UNRESOLVED` keeps it. No third reviewer unless you start a new cycle. Project-local `.codex/config.toml` is the 30-minute wait backstop; CheapGPT never writes `~/.codex`.
+4. First turn is a `cheapgpt-plan` cycle only unless you override: each turn the root picks RAPID (localized mechanism/delta/correction) or FULL (coupled decisions, uncertainty, integration risk) and records why. `ultracheap` gets planning from a fresh `gpt-6.1-sol`/medium child; Sol profiles self-plan and only use a fresh replacement planner on concrete REPLAN. Later turns implement under the assigned roles: Sol roots keep judgment-driven work and spawn one `gpt-6-luna`/max child for spec-bound mechanical work (including all required test/spy edits); `ultracheap` implements everything itself. Review outcomes are `PASS`, `FIX`, `FIX_NO_PLAN_CHANGES`, and `REPLAN`; after a correction there is one terminal `PASS` or `UNRESOLVED`. `PASS` deletes the board; `UNRESOLVED` keeps it. No third reviewer unless you start a new cycle. Project-local `.codex/config.toml` is the 30-minute wait backstop; CheapGPT never writes `~/.codex`.
 5. Mid-thread root change: tell the new root that the model and loop are changing. It must re-read `AGENTS.md`, recover thread/repo context, and continue the profile's loop on the next turn.
 
 Example thread start after `ultracheap` install:
@@ -109,7 +109,7 @@ Example override:
 
 Example mid-thread switch after installing `cheap-5x` into the same project:
 
-> We are changing the root to sol-6-xhigh (`gpt-6-sol` xhigh) and the CheapGPT cheap-5x loop. Read AGENTS.md and prior context, then continue next turn.
+> We are changing the root to sol-6.1-high (`gpt-6.1-sol` high) and the CheapGPT cheap-5x loop. Read AGENTS.md and prior context, then continue next turn.
 
 ## Install / update / doctor / uninstall
 

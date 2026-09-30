@@ -18,7 +18,7 @@ import {
   removeMultiAgentConfig,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.5.0";
+export const PACKAGE_VERSION = "1.6.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -531,9 +531,9 @@ Usage:
 
 Profiles:
   ultracheap   ChatGPT Plus, simple tasks     root=luna-6-max (gpt-6-luna max)
-  cheap        ChatGPT Plus, medium-hard      root=sol-6-high (gpt-6-sol high)
-  cheap-5x     ChatGPT Pro 5x, hardest        root=sol-6-xhigh (gpt-6-sol xhigh)
-  cheap-20x    ChatGPT Pro 20x, hardest       root=sol-6-max (gpt-6-sol max)
+  cheap        ChatGPT Plus, medium-hard      root=sol-6.1-medium (gpt-6.1-sol medium)
+  cheap-5x     ChatGPT Pro 5x, hardest        root=sol-6.1-high (gpt-6.1-sol high)
+  cheap-20x    ChatGPT Pro 20x, hardest       root=sol-6.1-xhigh (gpt-6.1-sol xhigh)
 
 Options:
   --project <dir>     Target repository (default: cwd)
