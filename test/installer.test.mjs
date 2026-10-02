@@ -346,9 +346,10 @@ test("heartbeat hook uses nested Codex contract and includes turn_id", async () 
     assert.match(ctx, /CHEAPGPT HEARTBEAT: hook executed for current turn_id=turn-abc-123/);
     assert.match(ctx, /CHEAPGPT ACTIVE: profile=ultracheap/);
     assert.match(ctx, /Preferred profile root: luna-6-max/);
-    assert.match(ctx, /PLANNING MODE:/);
-    assert.match(ctx, /IMPLEMENTATION MODE:/);
-    assert.ok(ctx.length < 35000);
+    assert.match(ctx, /CHEAPGPT TURN REMINDER/);
+    assert.doesNotMatch(ctx, /PLANNING MODE:/);
+    assert.doesNotMatch(ctx, /IMPLEMENTATION MODE:/);
+    assert.ok(ctx.length < 6000);
     assert.doesNotMatch(ctx, /You are the persistent Luna xHigh root orchestrator/);
     assert.doesNotMatch(ctx, /stop and ask the user to switch/);
     assert.doesNotMatch(ctx, /remain idle/);
@@ -379,6 +380,7 @@ test("compact recovery uses nested SessionStart contract and rehydrates the mana
     assert.match(ctx, /CHEAPGPT RECOVERY: SessionStart source=compact succeeded/);
     assert.ok(ctx.includes(block.trim()));
     assert.match(ctx, /sol-6.1-medium/);
+    assert.match(ctx, /CHEAPGPT TURN REMINDER/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -421,6 +423,18 @@ test("profiles have preferred-root guidance and no blocking root-identity gate",
     assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol|luna-6|sol-6)/);
     assert.match(text, /FIX_NO_PLAN_CHANGES/);
     assert.match(text, /RAPID/);
+  }
+});
+
+test("catalog carries one turn reminder per profile and no full modes", async () => {
+  const catalog = JSON.parse(await readFile(path.join(ROOT, "profiles", "catalog.json"), "utf8"));
+  for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
+    const meta = catalog.profiles[id];
+    assert.match(meta.planningMode, /^CHEAPGPT TURN REMINDER/);
+    assert.equal(meta.implementationMode, "");
+    assert.doesNotMatch(meta.planningMode, /PLANNING MODE:/);
+    assert.doesNotMatch(meta.planningMode, /IMPLEMENTATION MODE:/);
+    assert.ok(meta.planningMode.length < 4000);
   }
 });
 

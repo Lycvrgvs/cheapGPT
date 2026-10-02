@@ -63,7 +63,7 @@ Two layers keep the policy alive in Codex:
 | Layer | Role |
 | --- | --- |
 | `AGENTS.md` managed block | Constitution. Codex already loads project `AGENTS.md`. One profile only. |
-| `UserPromptSubmit` hook | Heartbeat. Tiny per-turn reminder plus planning/implementation mode lines. |
+| `UserPromptSubmit` hook | Heartbeat. One tiny per-turn CavePrompt reminder (~3KB), not the full mode text. |
 | `SessionStart` matcher `compact` | Recovery. After compaction, rehydrates the full current managed block once. |
 
 Normal turns do **not** re-inject the full prompt. Project-local hooks run only when Codex trusts the project; `AGENTS.md` still works if hooks are skipped.
@@ -148,7 +148,7 @@ node --test test/installer.test.mjs
 ```text
 install.mjs              zero-dependency installer (node:fs, node:crypto, node:path)
 profiles/*.md            canonical opaque profile policies
-profiles/catalog.json    profile metadata + heartbeat mode lines
+profiles/catalog.json    profile metadata + heartbeat turn reminder
 hooks/cheapgpt-turn.mjs  copied into each target project's .codex/hooks/
 test/installer.test.mjs
 ```

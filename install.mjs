@@ -18,7 +18,7 @@ import {
   removeMultiAgentConfig,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.7.0";
+export const PACKAGE_VERSION = "1.7.1";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
