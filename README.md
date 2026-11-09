@@ -1,6 +1,6 @@
 # CheapGPT
 
-CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The persistent root model does the implementation; GPT-6 Astra is spawned only as a native planning advisor and a native reviewer. The point is to keep expensive model output small without starving agents of the context they need.
+CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The root model plans, decides, integrates and verifies. A dynamic implementer (Terra) takes every task that needs judgment, and a mechanical implementer (Luna) takes every task the handoff fully determines. Fresh reviewers check the plan and the build twice each: once when the core is done and again when it is complete. When a review fails, a fresh loop-breaker takes over a new cycle instead of letting work spiral.
 
 This is **not** a global Codex install. It does **not** write `~/.codex`, does **not** change other repositories, and does **not** apply to every thread on your machine. It only mutates the target project folder you pass as `--project`. Every repository, worktree, or project that should use CheapGPT needs its own install into **that folder's** `AGENTS.md` (and that folder's `.codex/` hooks). If you start a new repo tomorrow, install CheapGPT there again.
 
@@ -16,21 +16,21 @@ If a human asked you to install CheapGPT into the **current** project:
 4. Run the installer with Node 18+ from the **target project** as `--project`:
 
 ```bash
-node /path/to/cheapGPT/install.mjs install --project . --profile ultracheap
+node /path/to/cheapGPT/install.mjs install --project . --profile cheap
 ```
 
 Windows PowerShell:
 
 ```powershell
-node C:\path\to\cheapGPT\install.mjs install --project . --profile ultracheap
+node C:\path\to\cheapGPT\install.mjs install --project . --profile cheap
 ```
 
 5. Do not edit `AGENTS.md` yourself to insert the prompt. Do not install more than one profile. Do not dump all profiles into context.
-6. After install, tell the human: trust this project in Codex, review `/hooks`, optionally select the profile's preferred root, then start a **plan-only** first turn unless they overrode that. An already-running Codex root continues if it differs.
+6. After install, tell the human: trust this project in Codex, review `/hooks`, and optionally select the profile's preferred root. An already-running Codex root continues if it differs.
 
 ### Update an existing CheapGPT install
 
-If this project already has a CheapGPT managed block or `.cheapgpt/state.json`, do **not** copy new prompt text by hand. CheapGPT has no separate schema migrator: `update` replaces only CheapGPT-owned files (the managed `AGENTS.md` block, `.cheapgpt/state.json`, and CheapGPT hook entries/script) and preserves user-owned instructions outside the markers. There is no user-owned payload inside the CheapGPT block.
+If this project already has a CheapGPT managed block or `.cheapgpt/state.json`, do **not** copy new prompt text by hand. `update` replaces only CheapGPT-owned files (the managed `AGENTS.md` block, `.cheapgpt/state.json`, and CheapGPT hook entries/script) and preserves user-owned instructions outside the markers. Installs of the retired `cheap-5x` and `cheap-20x` profiles move to `cheap-100` on `update`.
 
 ```bash
 node /path/to/cheapGPT/install.mjs update --project . --dry-run
@@ -58,12 +58,12 @@ CheapGPT owns exactly one bounded block in the target repo:
 
 Everything outside that block is the user's. Install/update replace only the CheapGPT block. Uninstall removes only CheapGPT files.
 
-Two layers keep the policy alive in Codex:
+Three layers keep the policy alive in Codex:
 
 | Layer | Role |
 | --- | --- |
 | `AGENTS.md` managed block | Constitution. Codex already loads project `AGENTS.md`. One profile only. |
-| `UserPromptSubmit` hook | Heartbeat. One tiny per-turn CavePrompt reminder (~3KB), not the full mode text. |
+| `UserPromptSubmit` hook | Heartbeat. A short per-turn reminder (under 1 KB for cheap profiles), not the full profile text. |
 | `SessionStart` matcher `compact` | Recovery. After compaction, rehydrates the full current managed block once. |
 
 Normal turns do **not** re-inject the full prompt. Project-local hooks run only when Codex trusts the project; `AGENTS.md` still works if hooks are skipped.
@@ -78,47 +78,45 @@ AGENTS.md                         # bounded CheapGPT block appended or replaced
 .codex/hooks/cheapgpt-turn.mjs    # heartbeat + compact recovery
 ```
 
+While a task runs, the root also keeps `cheapgpt/plan.md` (the board) and `temporary/` (scratch files) in the project. Both are git-excluded and deleted when the task passes.
+
 ## Profiles
 
 Install **exactly one**. They are mutually exclusive.
 
-| Profile | Account | Use when | Preferred root | Planner | Reviewer | Board budget |
-| --- | --- | --- | --- | --- | --- | ---: |
-| `ultracheap` | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | fresh `gpt-6.1-sol`/medium | fresh `gpt-6-luna`/max ×2 | 5,000 |
-| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | root self-plans; `gpt-6.1-sol`/xhigh on REPLAN | `gpt-6.1-sol`/medium ×2 | 10,000 |
-| `cheap-5x` | ChatGPT Pro 5x | Hardest tasks | sol-6.1-high (`gpt-6.1-sol` high) | root self-plans; `gpt-6-astra`/medium on REPLAN | `gpt-6.1-sol`/high ×2 | 15,000 |
-| `cheap-20x` | ChatGPT Pro 20x | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | root self-plans; `gpt-6-astra`/xhigh on REPLAN | `gpt-6.1-sol`/xhigh ×2 | 20,000 |
+| Profile | Account | Use when | Root | Dynamic (Terra) | Mechanical (Luna) | Reviewers | Loop-breaker | Board budget |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | `gpt-6.1-terra` medium | `gpt-6-luna` max | `gpt-6.1-sol` medium | `gpt-6.1-sol` xhigh | 20,000 |
+| `cheap-100` | ChatGPT Pro | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | `gpt-6.1-terra` max | `gpt-6-luna` max | `gpt-6.1-sol` xhigh | `gpt-6-astra` xhigh | 25,000 |
+| `ultracheap` (legacy) | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | — (root implements) | — | `gpt-6-luna` max | fresh `gpt-6.1-sol` medium replanner | 15,000 |
 
-Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution: if the already-running root differs, work continues without a switch or substitute-root approval. Planner/reviewer/mechanical model and effort stay as specified. Sol roots own judgment-driven work (architecture, core logic, debugging, contracts); `gpt-6-luna` at `max` does spec-bound mechanical work, including all required test/spy edits. `ultracheap` implements everything itself with its luna root. Pick `ultracheap` to save Plus credits on small work, `cheap` when Plus work is actually hard, and a Sol profile only if the account is Pro 5x/20x and the task is brutal.
+`ultracheap` is a **legacy** profile. It keeps the previous orchestration design and is not maintained against the current flow. A new ultracheap flow will be released once good cheap models and big models at a decent price make it viable.
 
-## How to use it in a repo / thread
+Preferred root is the economical/capability configuration CheapGPT recommends. It does not override Codex's harness/system model identity and is not a prerequisite for execution. If the already-running root differs, work continues without a switch.
 
-1. Install into **this** project (`--project .`). Repeat for every other project.
-2. In Codex, open that project, trust it, and review `/hooks` so CheapGPT heartbeat/recovery can run. Project-local hooks only execute for trusted projects; changing the hook file requires re-reviewing it. `doctor` checks installed files only — it is not evidence that Codex Desktop executed a hook on a given turn. Runtime evidence is a `CHEAPGPT HEARTBEAT` received for that turn's `turn_id`.
-3. Optionally set the thread to the profile's preferred root. If the running Codex root differs (including a generic system identity), CheapGPT continues with the current root and does not stop for a switch or substitute approval.
-4. First turn is a `cheapgpt-plan` cycle only unless you override: each turn the root picks RAPID (localized mechanism/delta/correction) or FULL (coupled decisions, uncertainty, integration risk) and records why. `ultracheap` gets planning from a fresh `gpt-6.1-sol`/medium child; Sol profiles self-plan and only use a fresh replacement planner on concrete REPLAN. Later turns implement under the assigned roles: Sol roots keep judgment-driven work and spawn one `gpt-6-luna`/max child for spec-bound mechanical work (including all required test/spy edits); `ultracheap` implements everything itself. Review outcomes are `PASS`, `FIX`, `FIX_NO_PLAN_CHANGES`, and `REPLAN`; after a correction there is one terminal `PASS` or `UNRESOLVED`. `PASS` deletes the board; `UNRESOLVED` keeps it. No third reviewer unless you start a new cycle. A diligence standard bans lazy, superficial, or over-compacted work, and `cheapgpt/plan.md` plus handoffs use CavePrompt density encoding with lossless recovery rules. Project-local `.codex/config.toml` is the 30-minute wait backstop; CheapGPT never writes `~/.codex`.
-5. Mid-thread root change: tell the new root that the model and loop are changing. It must re-read `AGENTS.md`, recover thread/repo context, and continue the profile's loop on the next turn.
+## How a task runs (cheap, cheap-100)
 
-Example thread start after `ultracheap` install:
-
-> Use CheapGPT. Plan first, then wait. Task: …
-
-Example override:
-
-> Skip planning and implement this fix.
-
-Example mid-thread switch after installing `cheap-5x` into the same project:
-
-> We are changing the root to sol-6.1-high (`gpt-6.1-sol` high) and the CheapGPT cheap-5x loop. Read AGENTS.md and prior context, then continue next turn.
+1. **Route.** The root picks a route and states it in one line:
+   - DIRECT: one obvious local edit. The root edits, runs the check, and is done, with no children and no board.
+   - FOCUSED: known mechanism.
+   - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output.
+2. **PLAN.** The root writes the acceptance list and the mechanism (the core plan), which a fresh reviewer checks. Then it writes the handoffs (the complete plan), which a new fresh reviewer checks.
+3. **BUILD.** Terra and Luna build the core path first, which gets a review. Then they build the rest, which gets a terminal review. A repair that doesn't fix the problem is reverted, and the root goes back to PLAN instead of patching again.
+4. **Reviews.** Core reviews return `PASS`, `FIX` or `ESCALATE`; terminal reviews return `PASS` or `UNRESOLVED`. A finding counts only with a criterion, evidence and one action.
+5. **Loop-breaking.**
+   - Any terminal `UNRESOLVED` starts a new cycle led by a fresh loop-breaker.
+   - Two loop-breaker cycles without a pass, or one without significant advance (more acceptance criteria passing on a real run), lead to one **step back**: a big-picture review that names the step at fault and replans from there.
+   - After two more cycles without a pass, the task stops **BLOCKED** with EXPLORE/RESEARCH options for you.
+6. **Issue report.** After a task that needed a loop-breaker or the step back finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
 
 ## Install / update / doctor / uninstall
 
 Requires Node 18+ and a checkout of this repo (so `profiles/` and `hooks/` sit beside `install.mjs`). No npm publish, no `npm install`, no global CLI.
 
 ```bash
-node /path/to/cheapGPT/install.mjs install --project . --profile ultracheap
+node /path/to/cheapGPT/install.mjs install --project . --profile cheap
 node /path/to/cheapGPT/install.mjs update --project .
-node /path/to/cheapGPT/install.mjs update --project . --profile cheap
+node /path/to/cheapGPT/install.mjs update --project . --profile cheap-100
 node /path/to/cheapGPT/install.mjs doctor --project .
 node /path/to/cheapGPT/install.mjs uninstall --project .
 ```
@@ -136,6 +134,12 @@ Useful flags:
 `--global` is rejected on purpose.
 
 If you hand-edit the managed block, `doctor` fails and `update`/`uninstall` refuse until `--force`.
+
+## Branches
+
+- `main`: this Codex edition.
+- `claude-edition`: the same flow for Claude Code (CLAUDE.md, native subagents).
+- `exp`: experimental, with a Claude Code root and Terra/Luna running as Codex CLI sessions.
 
 ## Tests
 

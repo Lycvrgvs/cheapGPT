@@ -18,7 +18,7 @@ import {
   removeMultiAgentConfig,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.7.1";
+export const PACKAGE_VERSION = "1.8.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -30,15 +30,19 @@ const PROFILE_ALIASES = {
   ultracheap: "ultracheap",
   ultra: "ultracheap",
   cheap: "cheap",
-  "cheap-5x": "cheap-5x",
-  cheap5x: "cheap-5x",
-  "5x": "cheap-5x",
-  "cheap-20x": "cheap-20x",
-  cheap20x: "cheap-20x",
-  "20x": "cheap-20x",
-  "cheap-25x": "cheap-20x",
-  cheap25x: "cheap-20x",
-  "25x": "cheap-20x",
+  "cheap-100": "cheap-100",
+  cheap100: "cheap-100",
+  "100": "cheap-100",
+  // retired profiles migrate to cheap-100
+  "cheap-5x": "cheap-100",
+  cheap5x: "cheap-100",
+  "5x": "cheap-100",
+  "cheap-20x": "cheap-100",
+  cheap20x: "cheap-100",
+  "20x": "cheap-100",
+  "cheap-25x": "cheap-100",
+  cheap25x: "cheap-100",
+  "25x": "cheap-100",
 };
 
 export class CheapgptError extends Error {
@@ -72,7 +76,7 @@ export async function loadProfile(profileId, sourceRoot = HERE) {
   const meta = catalog.profiles[profileId];
   if (!meta) {
     throw new CheapgptError(
-      `Unknown profile '${profileId}'. Use ultracheap, cheap, cheap-5x, or cheap-20x.`,
+      `Unknown profile '${profileId}'. Use cheap, cheap-100, or ultracheap (legacy).`,
       "PROFILE"
     );
   }
@@ -95,7 +99,7 @@ export function buildManagedBlock(profileId, profileBody) {
     "",
     `Active profile: \`${profileId}\``,
     "",
-    "This CheapGPT policy applies to every user turn in this repository. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute the profile's explicitly requested Astra planner/reviewer model or reasoning effort. A preferred root configuration is advisory and must not block the already-running harness/system root. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
+    "This CheapGPT policy applies to every user turn in this repository. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute any model or reasoning effort the profile specifies for its roles. A preferred root configuration is advisory and must not block the already-running harness/system root. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
     "",
     body,
     "",
@@ -530,10 +534,9 @@ Usage:
   node install.mjs uninstall --project .
 
 Profiles:
-  ultracheap   ChatGPT Plus, simple tasks     root=luna-6-max (gpt-6-luna max)
   cheap        ChatGPT Plus, medium-hard      root=sol-6.1-medium (gpt-6.1-sol medium)
-  cheap-5x     ChatGPT Pro 5x, hardest        root=sol-6.1-high (gpt-6.1-sol high)
-  cheap-20x    ChatGPT Pro 20x, hardest       root=sol-6.1-xhigh (gpt-6.1-sol xhigh)
+  cheap-100    ChatGPT Pro, hardest           root=sol-6.1-xhigh (gpt-6.1-sol xhigh)
+  ultracheap   ChatGPT Plus, simple (legacy)  root=luna-6-max (gpt-6-luna max)
 
 Options:
   --project <dir>     Target repository (default: cwd)
@@ -701,7 +704,7 @@ async function cmdInstall(args, sourceRoot = HERE) {
   const profileId = resolveProfileId(args.profile);
   if (!profileId) {
     throw new CheapgptError(
-      "install requires --profile ultracheap|cheap|cheap-5x|cheap-20x",
+      "install requires --profile cheap|cheap-100|ultracheap",
       "USAGE"
     );
   }
@@ -729,7 +732,7 @@ async function cmdUpdate(args, sourceRoot = HERE) {
     );
   }
   requireUnmodified(inspect, args.force, "update");
-  const profileId = resolveProfileId(args.profile) || inspect.state?.profile;
+  const profileId = resolveProfileId(args.profile) || resolveProfileId(inspect.state?.profile);
   if (!resolveProfileId(profileId)) {
     throw new CheapgptError(
       "update needs --profile because existing state has no recognized profile.",

@@ -82,7 +82,7 @@ test("existing AGENTS.md user instructions survive installation", async () => {
     await cli(dir, ["install", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Run npm test before completion\./);
-    assert.match(agents, /sol-6.1-medium/);
+    assert.match(agents, /gpt-6\.1-sol at medium effort/);
     assert.ok(agents.startsWith("# Repository Rules"));
     const markers = countMarkers(agents);
     assert.equal(markers.start, 1);
@@ -110,10 +110,9 @@ test("install is idempotent and never duplicates the managed block", async () =>
 
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
-    ["ultracheap", "luna-6-max", ["sol-6.1-medium", "sol-6.1-high", "sol-6.1-xhigh"]],
-    ["cheap", "sol-6.1-medium", ["luna-6-max", "sol-6.1-high", "sol-6.1-xhigh"]],
-    ["cheap-5x", "sol-6.1-high", ["luna-6-max", "sol-6.1-medium", "sol-6.1-xhigh"]],
-    ["cheap-20x", "sol-6.1-xhigh", ["luna-6-max", "sol-6.1-medium", "sol-6.1-high"]],
+    ["ultracheap", "luna-6-max", ["gpt-6.1-sol at medium effort", "gpt-6.1-sol at xhigh effort"]],
+    ["cheap", "gpt-6.1-sol at medium effort", ["luna-6-max", "gpt-6.1-sol at xhigh effort"]],
+    ["cheap-100", "gpt-6.1-sol at xhigh effort", ["luna-6-max", "gpt-6.1-sol at medium effort"]],
   ];
   for (const [profile, unique, absent] of cases) {
     const dir = await tempDir();
@@ -140,8 +139,8 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     await cli(dir, ["update", "--profile", "cheap"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Keep me\./);
-    assert.match(agents, /sol-6.1-medium/);
-    assert.match(agents, /mechanical handoff/);
+    assert.match(agents, /gpt-6\.1-sol at medium effort/);
+    assert.match(agents, /mechanical implementer/);
     assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
@@ -201,7 +200,7 @@ test("uninstall removes CheapGPT files and preserves user instructions", async (
   const dir = await tempDir();
   try {
     await writeFile(path.join(dir, "AGENTS.md"), "User rules stay.\n");
-    await cli(dir, ["install", "--profile", "cheap-5x"]);
+    await cli(dir, ["install", "--profile", "cheap-100"]);
     await cli(dir, ["uninstall"]);
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /User rules stay\./);
@@ -296,11 +295,11 @@ test("--global is refused", async () => {
 });
 
 test("buildManagedBlock wrapper stays short and preserves profile bytes", async () => {
-  const profile = await loadProfile("cheap-20x", ROOT);
-  const block = buildManagedBlock("cheap-20x", profile.body);
+  const profile = await loadProfile("cheap-100", ROOT);
+  const block = buildManagedBlock("cheap-100", profile.body);
   assert.ok(block.startsWith(START_MARKER));
   assert.ok(block.includes(END_MARKER));
-  assert.equal(extractProfileFromBlock(block, "cheap-20x"), profile.body.trim());
+  assert.equal(extractProfileFromBlock(block, "cheap-100"), profile.body.trim());
   assert.equal(applyManagedBlock("", block), block.endsWith("\n") ? block : `${block}\n`);
 });
 
@@ -379,8 +378,8 @@ test("compact recovery uses nested SessionStart contract and rehydrates the mana
     const ctx = payload.hookSpecificOutput.additionalContext;
     assert.match(ctx, /CHEAPGPT RECOVERY: SessionStart source=compact succeeded/);
     assert.ok(ctx.includes(block.trim()));
-    assert.match(ctx, /sol-6.1-medium/);
-    assert.match(ctx, /CHEAPGPT TURN REMINDER/);
+    assert.match(ctx, /gpt-6\.1-sol at medium effort/);
+    assert.match(ctx, /CHEAPGPT cheap\./);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -408,29 +407,27 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
   assert.throws(() => mergeCheapgptHooks("{bad", true), /not valid JSON/);
 });
 
-test("profiles have preferred-root guidance and no blocking root-identity gate", async () => {
-  for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
+test("profiles keep their required structure and no blocking root-identity gate", async () => {
+  const legacy = await readFile(path.join(ROOT, "profiles", "ultracheap.md"), "utf8");
+  for (const need of [/CavePrompt/, /UNRESOLVED/, /Preferred-root guidance:/, /FIX_NO_PLAN_CHANGES/, /RAPID/, /roughly 15000 tokens/]) assert.match(legacy, need);
+  for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    assert.match(text, /outstanding work ethic/);
-    assert.match(text, /CavePrompt/);
-    assert.match(text, /relevance gate/);
-    assert.match(text, /UNRESOLVED/);
-    assert.match(text, /Preferred-root guidance:/);
+    for (const need of [/## LAWS/, /## NOISE_VETO/, /## ROUTES/, /## FLOW/, /## SIGNALS/, /## LOOP-BREAKER/, /STEP BACK/, /## ROLES AND INVOCATION/, /## BOARD AND FILES/, /UNRESOLVED/, /ESCALATE/]) assert.match(text, need);
+    assert.match(text, new RegExp(`^PROFILE: ${id}\\n`));
+  }
+  for (const id of ["ultracheap", "cheap", "cheap-100"]) {
+    const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
     assert.doesNotMatch(text, /Required-root check:/);
-    assert.doesNotMatch(text, /do not spawn Astra and do not implement/);
     assert.doesNotMatch(text, /remain idle except/);
-    assert.doesNotMatch(text, /Until they switch or approve/);
     assert.doesNotMatch(text, /You are the persistent (Luna|Sol-high|gpt-5\.6-sol|luna-6|sol-6)/);
-    assert.match(text, /FIX_NO_PLAN_CHANGES/);
-    assert.match(text, /RAPID/);
   }
 });
 
 test("catalog carries one turn reminder per profile and no full modes", async () => {
   const catalog = JSON.parse(await readFile(path.join(ROOT, "profiles", "catalog.json"), "utf8"));
-  for (const id of ["ultracheap", "cheap", "cheap-5x", "cheap-20x"]) {
+  for (const id of ["ultracheap", "cheap", "cheap-100"]) {
     const meta = catalog.profiles[id];
-    assert.match(meta.planningMode, /^CHEAPGPT TURN REMINDER/);
+    assert.match(meta.planningMode, /^CHEAPGPT /);
     assert.equal(meta.implementationMode, "");
     assert.doesNotMatch(meta.planningMode, /PLANNING MODE:/);
     assert.doesNotMatch(meta.planningMode, /IMPLEMENTATION MODE:/);
@@ -438,15 +435,13 @@ test("catalog carries one turn reminder per profile and no full modes", async ()
   }
 });
 
-test("ultracheap and cheap no longer route through Astra", async () => {
+test("only cheap-100 routes its loop-breaker through Astra", async () => {
   for (const id of ["ultracheap", "cheap"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    assert.doesNotMatch(text, /Astra/);
+    assert.doesNotMatch(text, /Astra|astra/);
   }
-  for (const id of ["cheap-5x", "cheap-20x"]) {
-    const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    assert.match(text, /gpt-6-astra/);
-  }
+  const text = await readFile(path.join(ROOT, "profiles", "cheap-100.md"), "utf8");
+  assert.match(text, /gpt-6-astra, xhigh/);
 });
 
 test("doctor warns when installed packageVersion or hook script is stale", async () => {
@@ -518,7 +513,7 @@ test("existing table receives only missing keys without a duplicate table", asyn
 enabled = true
 `
     );
-    await cli(dir, ["install", "--profile", "cheap-5x"]);
+    await cli(dir, ["install", "--profile", "cheap-100"]);
     const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
     assert.equal(toml.split("[features.multi_agent_v2]").length - 1, 1);
     assert.match(toml, /wait_agent_enabled = true/);
