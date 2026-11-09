@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
   copyFile,
@@ -12,37 +13,22 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-  doctorCodexConfig,
-  mergeMultiAgentConfig,
-  removeMultiAgentConfig,
-} from "./codex-config.mjs";
-
 export const PACKAGE_VERSION = "1.8.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
 export const HOOK_TAG = "cheapgpt:";
 export const HOOK_SCRIPT_NAME = "cheapgpt-turn.mjs";
+export const INSTRUCTION_FILE = "CLAUDE.md";
+export const HOOK_MODE = "claude";
+export const CODEX_PERMISSION = "Bash(codex exec:*)";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROFILE_ALIASES = {
-  ultracheap: "ultracheap",
-  ultra: "ultracheap",
   cheap: "cheap",
   "cheap-100": "cheap-100",
   cheap100: "cheap-100",
   "100": "cheap-100",
-  // retired profiles migrate to cheap-100
-  "cheap-5x": "cheap-100",
-  cheap5x: "cheap-100",
-  "5x": "cheap-100",
-  "cheap-20x": "cheap-100",
-  cheap20x: "cheap-100",
-  "20x": "cheap-100",
-  "cheap-25x": "cheap-100",
-  cheap25x: "cheap-100",
-  "25x": "cheap-100",
 };
 
 export class CheapgptError extends Error {
@@ -76,7 +62,7 @@ export async function loadProfile(profileId, sourceRoot = HERE) {
   const meta = catalog.profiles[profileId];
   if (!meta) {
     throw new CheapgptError(
-      `Unknown profile '${profileId}'. Use cheap, cheap-100, or ultracheap (legacy).`,
+      `Unknown profile '${profileId}'. Use cheap or cheap-100 (ultracheap is a legacy Codex profile on the main branch).`,
       "PROFILE"
     );
   }
@@ -99,7 +85,7 @@ export function buildManagedBlock(profileId, profileBody) {
     "",
     `Active profile: \`${profileId}\``,
     "",
-    "This CheapGPT policy applies to every user turn in this repository. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute any model or reasoning effort the profile specifies for its roles. A preferred root configuration is advisory and must not block the already-running harness/system root. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
+    "This CheapGPT policy applies to every user turn in this repository and is addressed to the root agent; subagents follow only the instructions addressed to their role. Treat the active profile below as persistent orchestration policy for planning, implementation, testing, review, debugging, and completion. Do not silently substitute any model or reasoning effort the profile specifies for its roles. A preferred root configuration is advisory and must not block the already-running harness/system root. If the policy appears unavailable after context compaction or another harness transition, recover the current managed CheapGPT block before delegating or implementing.",
     "",
     body,
     "",
@@ -209,14 +195,13 @@ export function removeManagedBlock(source) {
 function projectPaths(projectRoot) {
   return {
     root: projectRoot,
-    agents: path.join(projectRoot, "AGENTS.md"),
+    agents: path.join(projectRoot, INSTRUCTION_FILE), // instruction file (CLAUDE.md); property name kept for a minimal diff
     stateDir: path.join(projectRoot, ".cheapgpt"),
     state: path.join(projectRoot, ".cheapgpt", "state.json"),
-    codexDir: path.join(projectRoot, ".codex"),
-    hooksDir: path.join(projectRoot, ".codex", "hooks"),
-    hooksJson: path.join(projectRoot, ".codex", "hooks.json"),
-    hookScript: path.join(projectRoot, ".codex", "hooks", HOOK_SCRIPT_NAME),
-    codexConfig: path.join(projectRoot, ".codex", "config.toml"),
+    claudeDir: path.join(projectRoot, ".claude"),
+    hooksDir: path.join(projectRoot, ".claude", "hooks"),
+    hooksJson: path.join(projectRoot, ".claude", "settings.json"), // Claude Code settings file holding the hooks key
+    hookScript: path.join(projectRoot, ".claude", "hooks", HOOK_SCRIPT_NAME),
   };
 }
 
@@ -245,12 +230,8 @@ async function atomicWrite(filePath, contents) {
   }
 }
 
-function posixHookCommand() {
-  return `node "$(git rev-parse --show-toplevel)/.codex/hooks/${HOOK_SCRIPT_NAME}"`;
-}
-
-function windowsHookCommand() {
-  return `powershell -NoProfile -Command "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/${HOOK_SCRIPT_NAME}')"`;
+function hookCommand() {
+  return `node "\${CLAUDE_PROJECT_DIR}/.claude/hooks/${HOOK_SCRIPT_NAME}"`;
 }
 
 function isCheapgptHookHandler(handler) {
@@ -260,14 +241,7 @@ function isCheapgptHookHandler(handler) {
 }
 
 function cheapgptHookHandler(kind) {
-  return {
-    type: "command",
-    command: posixHookCommand(),
-    commandWindows: windowsHookCommand(),
-    statusMessage: `${HOOK_TAG}${kind}`,
-    timeout: 15,
-    ...(kind === "recovery" ? { additionalContextLimit: 8000 } : {}),
-  };
+  return { type: "command", command: hookCommand(), statusMessage: `${HOOK_TAG}${kind}`, timeout: 15 };
 }
 
 export function mergeCheapgptHooks(existingJson, enabled) {
@@ -279,13 +253,13 @@ export function mergeCheapgptHooks(existingJson, enabled) {
       parsed = JSON.parse(existingJson);
     } catch {
       throw new CheapgptError(
-        "Existing .codex/hooks.json is not valid JSON. Refusing to rewrite unrelated hooks.",
+        "Existing .claude/settings.json is not valid JSON. Refusing to rewrite unrelated hooks.",
         "HOOKS"
       );
     }
   }
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CheapgptError("Existing .codex/hooks.json is not an object.", "HOOKS");
+    throw new CheapgptError("Existing .claude/settings.json is not an object.", "HOOKS");
   }
   if (!parsed.hooks || typeof parsed.hooks !== "object" || Array.isArray(parsed.hooks)) {
     parsed.hooks = {};
@@ -333,16 +307,26 @@ export function mergeCheapgptHooks(existingJson, enabled) {
       ? parsed.hooks.SessionStart
       : [];
     startGroups.push({
-      matcher: "^compact$",
+      matcher: "compact",
       hooks: [cheapgptHookHandler("recovery")],
     });
     parsed.hooks.SessionStart = startGroups;
   }
 
-  if (!parsed.description) {
-    parsed.description = "Project-local Codex hooks.";
-  }
   return `${JSON.stringify(parsed, null, 2)}\n`;
+}
+
+export function mergeCodexPermission(settingsText, enabled) {
+  const parsed = settingsText && settingsText.trim() ? JSON.parse(settingsText) : {};
+  if (!parsed.permissions || typeof parsed.permissions !== "object") parsed.permissions = {};
+  const allow = Array.isArray(parsed.permissions.allow) ? parsed.permissions.allow.filter((x) => x !== CODEX_PERMISSION) : [];
+  if (enabled) allow.push(CODEX_PERMISSION);
+  if (allow.length) parsed.permissions.allow = allow; else delete parsed.permissions.allow;
+  if (!Object.keys(parsed.permissions).length) delete parsed.permissions;
+  return `${JSON.stringify(parsed, null, 2)}\n`;
+}
+export function hasCodexPermission(settingsText) {
+  try { return (JSON.parse(settingsText)?.permissions?.allow || []).includes(CODEX_PERMISSION); } catch { return false; }
 }
 
 export function cheapgptHookCount(hooksJson) {
@@ -411,25 +395,19 @@ function buildState({
     implementationMode: profile.meta.implementationMode,
     installedAt: previous?.installedAt || now,
     updatedAt: now,
-    instructionFile: "AGENTS.md",
+    instructionFile: INSTRUCTION_FILE,
     managedBlockSha256: sha256(managedBlock),
     profileSha256: profile.sha256,
     hookMode,
-    hookFiles: hookMode === "codex" ? [`.codex/hooks/${HOOK_SCRIPT_NAME}`] : [],
+    hookFiles: hookMode === HOOK_MODE ? [`.claude/hooks/${HOOK_SCRIPT_NAME}`] : [],
     created: {
       agents: Boolean(created?.agents),
       hooksJson: Boolean(created?.hooksJson),
       hookScript: Boolean(created?.hookScript),
       stateDir: Boolean(created?.stateDir),
-      codexDir: Boolean(created?.codexDir),
-      codexConfig: Boolean(created?.codexConfig),
-      tomlTable: Boolean(created?.tomlTable),
+      claudeDir: Boolean(created?.claudeDir),
     },
-    toml: {
-      createdFile: Boolean(created?.codexConfig),
-      createdTable: Boolean(created?.tomlTable),
-      managedKeys: created?.tomlManagedKeys || [],
-    },
+    codexPermission: Boolean(created?.codexPermission),
   };
 }
 
@@ -503,7 +481,7 @@ export function parseArgs(argv) {
     }
     else if (token === "--global") {
       throw new CheapgptError(
-        "CheapGPT refuses --global. It is project-local only and writes that project's AGENTS.md, never ~/.codex.",
+        "CheapGPT refuses --global. It is project-local only and writes that project's CLAUDE.md and .claude/, never ~/.claude.",
         "USAGE"
       );
     } else if (token === "-h" || token === "--help") {
@@ -517,13 +495,13 @@ export function parseArgs(argv) {
 }
 
 export function helpText() {
-  return `CheapGPT — project-local Codex orchestration installer
+  return `CheapGPT — project-local Claude Code orchestration installer
 
 CheapGPT never installs globally. It only mutates the target --project directory:
-  AGENTS.md
+  CLAUDE.md
   .cheapgpt/state.json
-  .codex/hooks.json
-  .codex/hooks/cheapgpt-turn.mjs
+  .claude/settings.json (hooks key)
+  .claude/hooks/cheapgpt-turn.mjs
 
 Every repository needs its own install. Installing in one project does not affect others.
 
@@ -534,9 +512,8 @@ Usage:
   node install.mjs uninstall --project .
 
 Profiles:
-  cheap        ChatGPT Plus, medium-hard      root=sol-6.1-medium (gpt-6.1-sol medium)
-  cheap-100    ChatGPT Pro, hardest           root=sol-6.1-xhigh (gpt-6.1-sol xhigh)
-  ultracheap   ChatGPT Plus, simple (legacy)  root=luna-6-max (gpt-6-luna max)
+  cheap        Claude Max, medium-hard      root=Opus 5.5 medium
+  cheap-100    Claude Max, hardest          root=Opus 5.5 high
 
 Options:
   --project <dir>     Target repository (default: cwd)
@@ -544,10 +521,10 @@ Options:
   --dry-run           Validate and report without writing
   --force             Overwrite a manually edited CheapGPT block
   --json              Machine-readable output
-  --no-hooks          Skip Codex heartbeat/recovery hooks
+  --no-hooks          Skip Claude Code heartbeat/recovery hooks
   --hooks             Install hooks (default)
 
-Do not copy-paste profile text into AGENTS.md. Always run this script.
+Do not copy-paste profile text into CLAUDE.md. Always run this script.
 `;
 }
 
@@ -555,21 +532,18 @@ async function inspectProject(paths) {
   const agents = await readTextIfExists(paths.agents);
   const state = await readState(paths);
   const hooksJson = await readTextIfExists(paths.hooksJson);
-  const codexConfig = await readTextIfExists(paths.codexConfig);
   const region = extractManagedRegion(agents || "");
   return {
     agents,
     state,
     hooksJson,
-    codexConfig,
     region,
     hasAgents: agents != null,
     hasState: state != null,
     hasHooksJson: hooksJson != null,
-    hasCodexDir: existsSync(paths.codexDir),
+    hasClaudeDir: existsSync(paths.claudeDir),
     hasStateDir: existsSync(paths.stateDir),
     hasHookScript: existsSync(paths.hookScript),
-    hasCodexConfig: codexConfig != null,
   };
 }
 
@@ -600,23 +574,15 @@ async function writeInstallation({
   hookMode,
   dryRun,
 }) {
+  const catalog = await loadCatalog(HERE);
   const managedBlock = buildManagedBlock(profile.id, profile.body);
   const nextAgents = applyManagedBlock(inspect.agents || "", managedBlock);
-  let tomlMerge;
-  try {
-    tomlMerge = mergeMultiAgentConfig(inspect.codexConfig);
-  } catch (err) {
-    throw new CheapgptError(err.message, err.code || "TOML");
-  }
   const created = {
     agents: !inspect.hasAgents,
-    hooksJson: hookMode === "codex" && !inspect.hasHooksJson,
-    hookScript: hookMode === "codex" && !inspect.hasHookScript,
+    hooksJson: hookMode === HOOK_MODE && !inspect.hasHooksJson,
+    hookScript: hookMode === HOOK_MODE && !inspect.hasHookScript,
     stateDir: !inspect.hasStateDir,
-    codexDir: (hookMode === "codex" || true) && !inspect.hasCodexDir,
-    codexConfig: !inspect.hasCodexConfig && tomlMerge.createdFile,
-    tomlTable: inspect.state?.created?.tomlTable || tomlMerge.createdTable,
-    tomlManagedKeys: tomlMerge.managedKeys,
+    claudeDir: (hookMode === HOOK_MODE || true) && !inspect.hasClaudeDir,
   };
   const nextState = buildState({
     profile,
@@ -624,36 +590,37 @@ async function writeInstallation({
     hookMode,
     created: {
       agents: inspect.state?.created?.agents || created.agents,
-      hooksJson: hookMode === "codex" && (inspect.state?.created?.hooksJson || created.hooksJson),
-      hookScript: hookMode === "codex" && (inspect.state?.created?.hookScript || created.hookScript),
+      hooksJson: hookMode === HOOK_MODE && (inspect.state?.created?.hooksJson || created.hooksJson),
+      hookScript: hookMode === HOOK_MODE && (inspect.state?.created?.hookScript || created.hookScript),
       stateDir: inspect.state?.created?.stateDir || created.stateDir,
-      codexDir: inspect.state?.created?.codexDir || created.codexDir,
-      codexConfig: inspect.state?.created?.codexConfig || created.codexConfig,
-      tomlTable: created.tomlTable,
-      tomlManagedKeys: created.tomlManagedKeys,
+      claudeDir: inspect.state?.created?.claudeDir || created.claudeDir,
+      codexPermission: catalog.harness === "claude-exp",
     },
     previous: inspect.state,
   });
-  const nextHooksJson =
-    hookMode === "codex"
+  let nextHooksJson =
+    hookMode === HOOK_MODE
       ? mergeCheapgptHooks(inspect.hooksJson, true)
       : inspect.hasHooksJson
         ? mergeCheapgptHooks(inspect.hooksJson, false)
         : null;
+  if (catalog.harness === "claude-exp") {
+    nextHooksJson = mergeCodexPermission(nextHooksJson == null ? "" : nextHooksJson, true);
+  }
   const hookSource = path.join(HERE, "hooks", HOOK_SCRIPT_NAME);
 
   const planned = {
     profile: profile.id,
-    instructionFile: "AGENTS.md",
+    instructionFile: INSTRUCTION_FILE,
     hookMode,
     managedBlockSha256: nextState.managedBlockSha256,
-    writes: ["AGENTS.md", ".cheapgpt/state.json", ".codex/config.toml"],
+    writes: [INSTRUCTION_FILE, ".cheapgpt/state.json"],
   };
-  if (hookMode === "codex") {
-    planned.writes.push(".codex/hooks.json", `.codex/hooks/${HOOK_SCRIPT_NAME}`);
-  } else if (inspect.hasHooksJson || inspect.hasHookScript) {
-    planned.writes.push(".codex/hooks.json");
-    if (inspect.hasHookScript) planned.removes = [`.codex/hooks/${HOOK_SCRIPT_NAME}`];
+  if (hookMode === HOOK_MODE) {
+    planned.writes.push(".claude/settings.json", `.claude/hooks/${HOOK_SCRIPT_NAME}`);
+  } else if (inspect.hasHooksJson || inspect.hasHookScript || catalog.harness === "claude-exp") {
+    planned.writes.push(".claude/settings.json");
+    if (inspect.hasHookScript) planned.removes = [`.claude/hooks/${HOOK_SCRIPT_NAME}`];
   }
 
   if (dryRun) {
@@ -668,27 +635,21 @@ async function writeInstallation({
       paths.hookScript,
       inspect.hasHookScript ? await readTextIfExists(paths.hookScript) : null
     ),
-    snapshotFile(paths.codexConfig, inspect.codexConfig),
   ];
 
   try {
     await atomicWrite(paths.agents, nextAgents);
     await maybeFail("agents");
-    await mkdir(paths.codexDir, { recursive: true });
-    await atomicWrite(paths.codexConfig, tomlMerge.text);
-    await maybeFail("config");
-    if (hookMode === "codex") {
+    if (hookMode === HOOK_MODE) {
       await mkdir(paths.hooksDir, { recursive: true });
       await copyFile(hookSource, paths.hookScript);
       await maybeFail("hooks");
+    }
+    if (nextHooksJson != null) {
       await atomicWrite(paths.hooksJson, nextHooksJson);
-    } else {
-      if (inspect.hasHooksJson && nextHooksJson != null) {
-        await atomicWrite(paths.hooksJson, nextHooksJson);
-      }
-      if (inspect.hasHookScript) {
-        await rm(paths.hookScript, { force: true });
-      }
+    }
+    if (hookMode !== HOOK_MODE && inspect.hasHookScript) {
+      await rm(paths.hookScript, { force: true });
     }
     await maybeFail("state");
     await atomicWrite(paths.state, `${JSON.stringify(nextState, null, 2)}\n`);
@@ -704,7 +665,7 @@ async function cmdInstall(args, sourceRoot = HERE) {
   const profileId = resolveProfileId(args.profile);
   if (!profileId) {
     throw new CheapgptError(
-      "install requires --profile cheap|cheap-100|ultracheap",
+      "install requires --profile cheap|cheap-100",
       "USAGE"
     );
   }
@@ -712,7 +673,7 @@ async function cmdInstall(args, sourceRoot = HERE) {
   const inspect = await inspectProject(paths);
   requireUnmodified(inspect, args.force, "install");
   const profile = await loadProfile(profileId, sourceRoot);
-  const hookMode = args.hooks ? "codex" : "none";
+  const hookMode = args.hooks ? HOOK_MODE : "none";
   return writeInstallation({
     paths,
     inspect,
@@ -740,8 +701,8 @@ async function cmdUpdate(args, sourceRoot = HERE) {
     );
   }
   const profile = await loadProfile(resolveProfileId(profileId), sourceRoot);
-  let hookMode = inspect.state?.hookMode === "none" ? "none" : "codex";
-  if (args.hooksExplicit) hookMode = args.hooks ? "codex" : "none";
+  let hookMode = inspect.state?.hookMode === "none" ? "none" : HOOK_MODE;
+  if (args.hooksExplicit) hookMode = args.hooks ? HOOK_MODE : "none";
   return writeInstallation({
     paths,
     inspect,
@@ -761,18 +722,20 @@ async function cmdUninstall(args) {
 
   const nextAgents =
     inspect.agents == null ? null : removeManagedBlock(inspect.agents);
-  const nextHooksJson = inspect.hasHooksJson
+  let nextHooksJson = inspect.hasHooksJson
     ? mergeCheapgptHooks(inspect.hooksJson, false)
     : null;
+  if (inspect.state?.codexPermission && nextHooksJson != null) {
+    nextHooksJson = mergeCodexPermission(nextHooksJson, false);
+  }
 
   const planned = {
     removes: [".cheapgpt/state.json"],
     writes: [],
   };
-  if (inspect.hasAgents) planned.writes.push("AGENTS.md");
-  if (inspect.hasHookScript) planned.removes.push(`.codex/hooks/${HOOK_SCRIPT_NAME}`);
-  if (inspect.hasHooksJson) planned.writes.push(".codex/hooks.json");
-  if (inspect.hasCodexConfig || inspect.state?.toml) planned.writes.push(".codex/config.toml");
+  if (inspect.hasAgents) planned.writes.push(INSTRUCTION_FILE);
+  if (inspect.hasHookScript) planned.removes.push(`.claude/hooks/${HOOK_SCRIPT_NAME}`);
+  if (inspect.hasHooksJson || inspect.state?.codexPermission) planned.writes.push(".claude/settings.json");
 
   if (args.dryRun) {
     return { dryRun: true, action: "uninstall", ...planned };
@@ -786,7 +749,6 @@ async function cmdUninstall(args) {
       paths.hookScript,
       inspect.hasHookScript ? await readTextIfExists(paths.hookScript) : null
     ),
-    snapshotFile(paths.codexConfig, inspect.codexConfig),
   ];
 
   try {
@@ -800,27 +762,10 @@ async function cmdUninstall(args) {
     if (nextHooksJson != null) {
       const parsed = JSON.parse(nextHooksJson);
       const empty =
-        parsed.hooks &&
-        Object.keys(parsed.hooks).length === 0 &&
+        (Object.keys(parsed).length === 0 || (Object.keys(parsed).length === 1 && parsed.hooks && Object.keys(parsed.hooks).length === 0)) &&
         inspect.state?.created?.hooksJson;
       if (empty) await rm(paths.hooksJson, { force: true });
       else await atomicWrite(paths.hooksJson, nextHooksJson);
-    }
-    if (inspect.hasCodexConfig || inspect.state?.toml || inspect.state?.created?.codexConfig) {
-      let removed;
-      try {
-        removed = removeMultiAgentConfig(inspect.codexConfig, {
-          createdFile: inspect.state?.created?.codexConfig || inspect.state?.toml?.createdFile,
-          createdTable: inspect.state?.created?.tomlTable || inspect.state?.toml?.createdTable,
-        });
-      } catch (err) {
-        throw new CheapgptError(err.message, err.code || "TOML");
-      }
-      if (removed.deleteFile || !String(removed.text || "").trim()) {
-        await rm(paths.codexConfig, { force: true });
-      } else {
-        await atomicWrite(paths.codexConfig, removed.text);
-      }
     }
     await maybeFail("state");
     await rm(paths.state, { force: true });
@@ -842,6 +787,7 @@ async function cmdUninstall(args) {
 export async function doctorProject(projectRoot, sourceRoot = HERE) {
   const paths = projectPaths(projectRoot);
   const inspect = await inspectProject(paths);
+  const catalog = await loadCatalog(sourceRoot);
   const issues = [];
   const warnings = [];
 
@@ -857,12 +803,12 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
       );
     }
     if (!resolveProfileId(state.profile)) issues.push(`unrecognized profile '${state.profile}'`);
-    if (state.instructionFile !== "AGENTS.md") {
+    if (state.instructionFile !== INSTRUCTION_FILE) {
       issues.push(`instructionFile ${state.instructionFile} is not AGENTS.md`);
     }
   }
-  if (!inspect.hasAgents) issues.push("missing AGENTS.md");
-  if (inspect.region.kind === "absent") issues.push("no CheapGPT managed block in AGENTS.md");
+  if (!inspect.hasAgents) issues.push(`missing ${INSTRUCTION_FILE}`);
+  if (inspect.region.kind === "absent") issues.push(`no CheapGPT managed block in ${INSTRUCTION_FILE}`);
   if (inspect.region.kind === "malformed") issues.push(`malformed markers: ${inspect.region.reason}`);
   if (inspect.region.kind === "ok" && state) {
     if (managedBlockModified(state, inspect.region.block)) {
@@ -882,17 +828,15 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
     }
   }
 
-  const tomlDoctor = doctorCodexConfig(inspect.codexConfig, {
-    createdFile: state?.created?.codexConfig || state?.toml?.createdFile,
-    createdTable: state?.created?.tomlTable || state?.toml?.createdTable,
-  });
-  issues.push(...tomlDoctor.issues);
-  warnings.push(...tomlDoctor.warnings);
+  const agentsMd = await readTextIfExists(path.join(projectRoot, "AGENTS.md"));
+  if (inspect.agents && inspect.agents.includes("@AGENTS.md") && agentsMd && agentsMd.includes(START_MARKER)) {
+    warnings.push("CLAUDE.md imports an AGENTS.md that holds a CheapGPT block; both policies would load");
+  }
 
   const hookCounts = cheapgptHookCount(inspect.hooksJson);
-  if (state?.hookMode === "codex") {
-    if (!inspect.hasHookScript) issues.push("missing .codex/hooks/cheapgpt-turn.mjs");
-    if (hookCounts.malformed) issues.push(".codex/hooks.json is malformed");
+  if (state?.hookMode === HOOK_MODE) {
+    if (!inspect.hasHookScript) issues.push("missing .claude/hooks/cheapgpt-turn.mjs");
+    if (hookCounts.malformed) issues.push(".claude/settings.json is malformed");
     if (hookCounts.heartbeat !== 1) {
       issues.push(`expected exactly one CheapGPT UserPromptSubmit heartbeat hook, found ${hookCounts.heartbeat}`);
     }
@@ -909,11 +853,23 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
       warnings.push("could not compare CheapGPT hook script to current sources");
     }
     warnings.push(
-      "project-local Codex hooks run only for trusted projects; AGENTS.md remains authoritative if hooks are skipped"
+      "Claude Code runs project hooks only after you accept the workspace trust dialog; review them with /hooks. CLAUDE.md remains authoritative if hooks are skipped"
     );
   } else if (state?.hookMode === "none") {
     if (hookCounts.heartbeat || hookCounts.recovery) {
       issues.push("hookMode is none but CheapGPT hook entries still exist");
+    }
+  }
+
+  if (catalog.harness === "claude-exp") {
+    if (agentsMd && agentsMd.includes(START_MARKER)) {
+      issues.push("AGENTS.md holds a CheapGPT block; Codex implementer sessions would load it as their own policy — remove it from AGENTS.md");
+    }
+    if (spawnSync("codex", ["--version"]).status !== 0) {
+      warnings.push("codex CLI not found on PATH; exp implementers cannot run");
+    }
+    if (!hasCodexPermission(inspect.hooksJson)) {
+      issues.push(`missing ${CODEX_PERMISSION} permission in .claude/settings.json`);
     }
   }
 
@@ -988,11 +944,7 @@ async function main() {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(`CheapGPT ${result.command} complete (${result.profile || result.action || "ok"})\n`);
-      if (result.hookMode === "codex") {
-        process.stdout.write(
-          "Hooks installed. Trust this project in Codex and re-review /hooks so heartbeat and compact recovery can run. Hook trust is tied to the current hook definition; an update that changes cheapgpt-turn.mjs requires review again.\n"
-        );
-      }
+      if (result.hookMode === HOOK_MODE) process.stdout.write("Hooks installed in .claude/settings.json. Accept the workspace trust dialog and review /hooks.\n");
     }
     if (result.command === "doctor" && result.ok === false) process.exitCode = 1;
   } catch (err) {
