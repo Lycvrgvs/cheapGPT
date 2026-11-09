@@ -106,8 +106,8 @@ test("install is idempotent and never duplicates the managed block", async () =>
 
 test("each profile installs only that profile's unique root text", async () => {
   const cases = [
-    ["cheap", "Opus 5.5 at medium effort", ["Opus 5.5 at high effort"]],
-    ["cheap-100", "Opus 5.5 at high effort", ["Opus 5.5 at medium effort"]],
+    ["cheap", "gpt-6.1-terra, medium", ["gpt-6.1-terra, max"]],
+    ["cheap-100", "gpt-6.1-terra, max", ["gpt-6.1-terra, medium"]],
   ];
   for (const [profile, unique, absent] of cases) {
     const dir = await tempDir();
@@ -134,7 +134,7 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     await cli(dir, ["update", "--profile", "cheap-100"]);
     const agents = await readFile(path.join(dir, "CLAUDE.md"), "utf8");
     assert.match(agents, /Keep me\./);
-    assert.match(agents, /Opus 5\.5 at high effort/);
+    assert.match(agents, /gpt-6\.1-terra, max/);
     assert.match(agents, /mechanical implementer/);
     assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
@@ -422,10 +422,10 @@ test("catalog carries one turn reminder per profile and no full modes", async ()
   }
 });
 
-test("claude-edition profiles route only Claude models", async () => {
+test("exp profiles route implementers through Codex CLI", async () => {
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    assert.doesNotMatch(text, /gpt-6|Terra|Luna|codex/);
+    for (const need of [/gpt-6\.1-terra/, /gpt-6-luna, max/, /codex exec resume/, /temporary\/runs\//]) assert.match(text, need);
   }
   assert.equal(existsSync(path.join(ROOT, "profiles", "ultracheap.md")), false);
 });
@@ -463,6 +463,20 @@ test("settings.json merge preserves unrelated keys and hooks", async () => {
     const after = JSON.parse(await readFile(path.join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(after.model, "opus");
     assert.equal(after.hooks?.UserPromptSubmit, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("exp install adds the codex permission and uninstall removes it", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "cheap"]);
+    const s = JSON.parse(await readFile(path.join(dir, ".claude", "settings.json"), "utf8"));
+    assert.ok(s.permissions.allow.includes("Bash(codex exec:*)"));
+    await cli(dir, ["uninstall"]);
+    const raw = await readFile(path.join(dir, ".claude", "settings.json"), "utf8").catch(() => "{}");
+    assert.ok(!raw.includes("codex exec"));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

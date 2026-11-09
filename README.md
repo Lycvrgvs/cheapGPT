@@ -4,6 +4,25 @@ CheapGPT installs a **project-local** Claude Code orchestration policy into a re
 
 It is **not** a global install. It never writes `~/.claude` and only mutates the target project folder you pass as `--project`. Every repository that should use CheapGPT needs its own install. Do not copy-paste profile text by hand; always run `install.mjs` so markers, hashes, and uninstall keep working.
 
+## EXP branch: Codex CLI implementers
+
+This `exp` branch is the Claude Code edition with one difference: the two implementers are **Codex CLI sessions** driven directly by the Opus root. The root orchestrates, reviews evidence and invokes the loop-breaker; Terra and Luna do the implementation.
+
+| Profile | Root | Dynamic (Terra) | Mechanical (Luna) | Reviewers | Loop-breaker | Board |
+| --- | --- | --- | --- | --- | --- | ---: |
+| `cheap` | opus-5.5-medium | `gpt-6.1-terra` medium | `gpt-6-luna` max | Opus 5.5 medium | Opus 5.5 xhigh | 20,000 |
+| `cheap-100` | opus-5.5-medium | `gpt-6.1-terra` max | `gpt-6-luna` max | Opus 5.5 medium | Fable 5.1 xhigh | 25,000 |
+
+**How the implementers run:**
+- Each implementer is one persistent session for the whole task: `codex exec` first, then `codex exec resume <thread_id>` for every later assignment.
+- Each call's packet and output live in `temporary/runs/<call-id>/`.
+- The root reads only `out.md`.
+
+**Requirements:**
+- `codex` on `PATH` and logged in.
+- The installer adds `Bash(codex exec:*)` to `.claude/settings.json` permissions, and uninstall removes it.
+- `AGENTS.md` must not hold a CheapGPT block, because Codex sessions would load it as their own orchestration policy. `doctor` reports it if it does.
+
 ## Install / update / doctor / uninstall
 
 Requires Node 18+ and a checkout of this branch (so `profiles/` and `hooks/` sit beside `install.mjs`).
