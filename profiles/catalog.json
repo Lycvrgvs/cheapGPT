@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "packageVersion": "1.8.0",
+  "packageVersion": "1.8.1",
   "profiles": {
     "cheap": {
       "id": "cheap",
@@ -11,7 +11,7 @@
       "root": "opus-5.5-medium",
       "planner": "self (root); loop-breaker Opus 5.5-xhigh",
       "reviewer": "Opus 5.5-medium",
-      "planningMode": "CHEAPGPT cheap. Apply the main prompt; reread cheapgpt/plan.md after context loss. Route line first (DIRECT/FOCUSED/FULL); escalate, never downgrade. Cycle: PLAN (core: acceptance list, mechanism; then handoffs) → BUILD (core path first; Terra dynamic: needs judgment; Luna mechanical: fully determined by the handoff, incl. tests; you integrate, check every step, write code only on DIRECT). Plan and build each: core review PASS/FIX/ESCALATE, terminal review PASS/UNRESOLVED. Failed repair or signal: revert, back to PLAN. UNRESOLVED: announce, new loop-breaker cycle now (fresh Opus xhigh replans); no significant advance or 2 such cycles → STEP BACK (big picture, back to the faulty step), then 2 cycles, then BLOCKED with EXPLORE/RESEARCH options. Terra/Luna via codex exec, others native subagents; verify each child's model; never simulate or read a missing result as a pass. Delete board and temporary/ on PASS.",
+      "planningMode": "CHEAPGPT cheap. Apply the main prompt; reread cheapgpt/plan.md after context loss. Route line first (DIRECT: obvious edit or bounded ops task / FOCUSED / FULL); escalate, never downgrade. Ship forward: criteria are decided by real-run output; add a check only for an observed failure, a criterion no run or reviewer can decide, or an unsafe action; verification stays smaller than the product. Cycle: PLAN (core: acceptance list, mechanism; then handoffs) → BUILD (core path first, run on real input, core review right after; Terra dynamic: needs judgment; Luna mechanical: fully determined by the handoff; you integrate and run the path, code only on DIRECT). Plan and build each: core review PASS/FIX/ESCALATE, terminal PASS/UNRESOLVED. Failed repair or signal: revert, back to PLAN. UNRESOLVED: announce, loop-breaker cycle now (fresh Opus xhigh replans); no significant advance or 2 such cycles → STEP BACK, then 2 cycles, then BLOCKED with EXPLORE/RESEARCH. Terra/Luna via codex exec, others native; never poll across turns; verify each child's model; never simulate or read a missing result as a pass. Each review: status line, acceptance table, Next. Delete board and temporary/ on PASS.",
       "implementationMode": ""
     },
     "cheap-100": {
@@ -23,7 +23,7 @@
       "root": "opus-5.5-medium",
       "planner": "self (root); loop-breaker Fable 5.1-xhigh",
       "reviewer": "Opus 5.5-medium",
-      "planningMode": "CHEAPGPT cheap-100. Apply the main prompt; reread cheapgpt/plan.md after context loss. Route line first (DIRECT/FOCUSED/FULL); escalate, never downgrade. Cycle: PLAN (core: acceptance list, mechanism; then handoffs) → BUILD (core path first; Terra dynamic: needs judgment; Luna mechanical: fully determined by the handoff, incl. tests; you integrate, check every step, write code only on DIRECT). Plan and build each: core review PASS/FIX/ESCALATE, terminal review PASS/UNRESOLVED. Failed repair or signal: revert, back to PLAN. UNRESOLVED: announce, new loop-breaker cycle now (fresh Fable xhigh replans); no significant advance or 2 such cycles → STEP BACK (big picture, back to the faulty step), then 2 cycles, then BLOCKED with EXPLORE/RESEARCH options. Terra/Luna via codex exec, others native subagents; verify each child's model; never simulate or read a missing result as a pass. Delete board and temporary/ on PASS.",
+      "planningMode": "CHEAPGPT cheap-100. Apply the main prompt; reread cheapgpt/plan.md after context loss. Route line first (DIRECT: obvious edit or bounded ops task / FOCUSED / FULL); escalate, never downgrade. Ship forward: criteria are decided by real-run output; add a check only for an observed failure, a criterion no run or reviewer can decide, or an unsafe action; verification stays smaller than the product. Cycle: PLAN (core: acceptance list, mechanism; then handoffs) → BUILD (core path first, run on real input, core review right after; Terra dynamic: needs judgment; Luna mechanical: fully determined by the handoff; you integrate and run the path, code only on DIRECT). Plan and build each: core review PASS/FIX/ESCALATE, terminal PASS/UNRESOLVED. Failed repair or signal: revert, back to PLAN. UNRESOLVED: announce, loop-breaker cycle now (fresh Fable xhigh replans); no significant advance or 2 such cycles → STEP BACK, then 2 cycles, then BLOCKED with EXPLORE/RESEARCH. Terra/Luna via codex exec, others native; never poll across turns; verify each child's model; never simulate or read a missing result as a pass. Each review: status line, acceptance table, Next. Delete board and temporary/ on PASS.",
       "implementationMode": ""
     }
   },
