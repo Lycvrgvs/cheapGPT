@@ -97,7 +97,7 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
 ## How a task runs (cheap, cheap-100)
 
 1. **Route.** The root picks a route and states it in one line:
-   - DIRECT: one obvious local edit. The root edits, runs the check, and is done, with no children and no board.
+   - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, with no children and no board.
    - FOCUSED: known mechanism.
    - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output.
 2. **PLAN.** The root writes the acceptance list and the mechanism (the core plan), which a fresh reviewer checks. Then it writes the handoffs (the complete plan), which a new fresh reviewer checks.
@@ -107,7 +107,7 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
    - Any terminal `UNRESOLVED` starts a new cycle led by a fresh loop-breaker.
    - Two loop-breaker cycles without a pass, or one without significant advance (more acceptance criteria passing on a real run), lead to one **step back**: a big-picture review that names the step at fault and replans from there.
    - After two more cycles without a pass, the task stops **BLOCKED** with EXPLORE/RESEARCH options for you.
-6. **Issue report.** After a task that needed a loop-breaker or the step back finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
+6. **Issue report.** After a task that needed a loop-breaker, the step back, or more than two fix rounds on one review finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
 
 ## Install / update / doctor / uninstall
 
