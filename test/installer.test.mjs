@@ -405,7 +405,7 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
 test("claude profiles keep their structure and use only Claude Code mechanics", async () => {
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/## LAWS/, /## NOISE_VETO/, /STEP BACK/, /## ROLES AND INVOCATION/, /UNRESOLVED/, /native `Agent` tool/]) assert.match(text, need);
+    for (const need of [/## LAWS/, /## NOISE_VETO/, /## BUILD MECHANICS/, /TINY LOOP/, /FULL STEP BACK/, /## ROLES AND INVOCATION/, /native `Agent` tool/]) assert.match(text, need);
     for (const bad of [/spawn_agent/, /fork_turns/, /wait_agent/, /gpt-6\.1-sol/, /Astra/, /AGENTS\.md/]) assert.doesNotMatch(text, bad);
   }
 });

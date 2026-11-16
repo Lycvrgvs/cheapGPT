@@ -1,6 +1,6 @@
 # CheapGPT — Claude Code edition
 
-CheapGPT installs a **project-local** Claude Code orchestration policy into a repository's root `CLAUDE.md`. The goal is the fewest expensive tokens per correct change. The Opus root plans, decides, integrates and verifies. A dynamic implementer (Sonnet) takes every task that needs judgment, and a mechanical implementer (Haiku) takes every task the handoff fully determines. Fresh Opus reviewers check the plan and the build twice each: once when the core is done and again when it is complete. When a review fails, a fresh loop-breaker takes over a new cycle instead of letting work spiral. This branch is the Claude Code edition; `main` is the Codex edition.
+CheapGPT installs a **project-local** Claude Code orchestration policy into a repository's root `CLAUDE.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the Opus root orchestrates, integrates and verifies without writing code. A dynamic implementer (Sonnet) takes every task that needs judgment, and a mechanical implementer (Haiku) takes every task the plan fully determines. Failures are fixed in tiny loops checked by real runs. A fix that fails gets one deep diagnosis by the strongest model; if that fails too, the task stops and comes back to you instead of spiraling. This branch is the Claude Code edition; `main` is the Codex edition.
 
 It is **not** a global install. It never writes `~/.claude` and only mutates the target project folder you pass as `--project`. Every repository that should use CheapGPT needs its own install. Do not copy-paste profile text by hand; always run `install.mjs` so markers, hashes, and uninstall keep working.
 
@@ -17,7 +17,7 @@ node /path/to/cheapGPT/install.mjs uninstall --project .
 
 Flags: `--dry-run`, `--force` (overwrite a hand-edited CheapGPT block), `--json`, `--no-hooks`, `--hooks` (default). `--global` is rejected.
 
-After install, open the project in Claude Code, accept the workspace trust dialog, and review `/hooks`. The committed `.claude/` config works in the CLI, desktop, and web sessions.
+After install or update, open the project in Claude Code, accept the workspace trust dialog, review `/hooks`, and set the root model to the profile's recommended root with `/model` (`cheap`: Opus 5.5 medium; `cheap-100`: Opus 5.5 high). The committed `.claude/` config works in the CLI, desktop, and web sessions.
 
 ## What it writes
 
@@ -34,20 +34,21 @@ Claude Code re-reads the project-root `CLAUDE.md` after compaction, so the compa
 
 Install **exactly one**.
 
-| Profile | Use when | Root | Dynamic | Mechanical | Reviewers | Loop-breaker | Board |
+| Profile | Use when | Root | Dynamic | Mechanical | Reviewers | Planner and loop-breaker | Board |
 | --- | --- | --- | --- | --- | --- | --- | ---: |
 | `cheap` | medium-hard tasks | opus-5.5-medium | Sonnet 5.5 medium | Haiku 5.5 xhigh | Opus 5.5 medium | Opus 5.5 xhigh | 20,000 |
 | `cheap-100` | hardest tasks | opus-5.5-high | Sonnet 5.5 xhigh | Haiku 5.5 xhigh | Opus 5.5 high | Fable 5.1 xhigh | 25,000 |
 
 There is no `ultracheap` on this branch; it remains a legacy Codex profile on `main`.
 
-Every subagent is spawned with Claude Code's native `Agent` tool and an explicit `model` and `effort`. A fork would run on the root's model, so implementers can't inherit the root conversation. Instead, each implementer gets a conversation packet with its first assignment and is continued through `SendMessage`. Reviewers and loop-breakers are always new subagents.
+Every subagent is spawned with Claude Code's native `Agent` tool and an explicit `model` and `effort`. A fork would run on the root's model, so implementers can't inherit the root conversation. Instead, the planner and each implementer get a conversation packet with their first assignment and are continued through `SendMessage`. Reviewers and loop-breakers are always new subagents.
 
 The flow is the same as on `main`:
 - route (DIRECT / FOCUSED / FULL);
-- PLAN and BUILD, each with a core review and a terminal review;
-- a failed repair is reverted and the root goes back to PLAN;
-- loop-breaker cycles, one step back, then BLOCKED with EXPLORE/RESEARCH options;
+- PLAN by the planner (the loop-breaker model), reviewed once on existing code;
+- BUILD: core first on a real run and reviewed right away, then the rest and a final review;
+- failures fixed in tiny loops checked by real runs;
+- a failed fix gets one full step back by a fresh loop-breaker, then BLOCKED with EXPLORE/RESEARCH options;
 - an issue draft only after a hard task finally passes.
 
 ## Tests
