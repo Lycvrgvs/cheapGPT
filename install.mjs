@@ -13,12 +13,15 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  DOC_LIMIT_96K,
   doctorCodexConfig,
   mergeMultiAgentConfig,
+  readDocLimit,
   removeMultiAgentConfig,
+  setDocLimit,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.8.1";
+export const PACKAGE_VERSION = "1.8.2";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -461,6 +464,7 @@ export function parseArgs(argv) {
     json: false,
     hooks: true,
     hooksExplicit: false,
+    agentsMdLimit: undefined,
     help: false,
   };
   const rest = argv.slice(2);
@@ -492,6 +496,12 @@ export function parseArgs(argv) {
     else if (token === "--profile") args.profile = next();
     else if (token.startsWith("--profile=")) args.profile = token.slice(10);
     else if (token === "--dry-run") args.dryRun = true;
+    else if (token === "--agents-md-limit") {
+      const value = next();
+      if (value === "96k") args.agentsMdLimit = DOC_LIMIT_96K;
+      else if (value === "default") args.agentsMdLimit = null;
+      else throw new CheapgptError("--agents-md-limit takes 96k or default", "USAGE");
+    }
     else if (token === "--force") args.force = true;
     else if (token === "--json") args.json = true;
     else if (token === "--hooks" || token === "--turn-reminder") {
@@ -546,6 +556,9 @@ Options:
   --json              Machine-readable output
   --no-hooks          Skip Codex heartbeat/recovery hooks
   --hooks             Install hooks (default)
+  --agents-md-limit 96k|default
+                      Raise Codex's AGENTS.md read limit for this project to 96 KiB
+                      (project_doc_max_bytes in .codex/config.toml), or restore the 32 KiB default
 
 Do not copy-paste profile text into AGENTS.md. Always run this script.
 `;
@@ -599,12 +612,16 @@ async function writeInstallation({
   profile,
   hookMode,
   dryRun,
+  agentsMdLimit,
 }) {
   const managedBlock = buildManagedBlock(profile.id, profile.body);
   const nextAgents = applyManagedBlock(inspect.agents || "", managedBlock);
   let tomlMerge;
   try {
     tomlMerge = mergeMultiAgentConfig(inspect.codexConfig);
+    if (agentsMdLimit !== undefined) {
+      tomlMerge = { ...tomlMerge, text: setDocLimit(tomlMerge.text, agentsMdLimit) };
+    }
   } catch (err) {
     throw new CheapgptError(err.message, err.code || "TOML");
   }
@@ -719,6 +736,7 @@ async function cmdInstall(args, sourceRoot = HERE) {
     profile,
     hookMode,
     dryRun: args.dryRun,
+    agentsMdLimit: args.agentsMdLimit,
   });
 }
 
@@ -748,6 +766,7 @@ async function cmdUpdate(args, sourceRoot = HERE) {
     profile,
     hookMode,
     dryRun: args.dryRun,
+    agentsMdLimit: args.agentsMdLimit,
   });
 }
 
@@ -809,7 +828,7 @@ async function cmdUninstall(args) {
     if (inspect.hasCodexConfig || inspect.state?.toml || inspect.state?.created?.codexConfig) {
       let removed;
       try {
-        removed = removeMultiAgentConfig(inspect.codexConfig, {
+        removed = removeMultiAgentConfig(setDocLimit(inspect.codexConfig, null), {
           createdFile: inspect.state?.created?.codexConfig || inspect.state?.toml?.createdFile,
           createdTable: inspect.state?.created?.tomlTable || inspect.state?.toml?.createdTable,
         });
@@ -888,6 +907,16 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
   });
   issues.push(...tomlDoctor.issues);
   warnings.push(...tomlDoctor.warnings);
+
+  if (inspect.hasAgents) {
+    const agentsBytes = Buffer.byteLength(inspect.agents, "utf8");
+    const limit = readDocLimit(inspect.codexConfig);
+    if (agentsBytes > limit) {
+      warnings.push(
+        `AGENTS.md is ${agentsBytes} bytes, over Codex's project_doc_max_bytes (${limit}); Codex silently drops the rest. Run update with --agents-md-limit 96k`
+      );
+    }
+  }
 
   const hookCounts = cheapgptHookCount(inspect.hooksJson);
   if (state?.hookMode === "codex") {

@@ -331,3 +331,54 @@ export function doctorCodexConfig(text, ownership = {}) {
   }
   return { issues, warnings };
 }
+
+export const DOC_LIMIT_START = "# cheapgpt:agents-md-limit:start";
+export const DOC_LIMIT_END = "# cheapgpt:agents-md-limit:end";
+export const DOC_LIMIT_DEFAULT = 32768;
+export const DOC_LIMIT_96K = 98304;
+
+function topLevelLines(lines) {
+  const first = lines.findIndex((line) => /^\s*\[/.test(line));
+  return first < 0 ? lines : lines.slice(0, first);
+}
+
+export function readDocLimit(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  for (const line of topLevelLines(lines)) {
+    const parsed = parseAssignment(line);
+    if (parsed && parsed.key === "project_doc_max_bytes") {
+      const value = Number(parsed.value);
+      return Number.isFinite(value) ? value : DOC_LIMIT_DEFAULT;
+    }
+  }
+  return DOC_LIMIT_DEFAULT;
+}
+
+// bytes: a number writes the CheapGPT-owned project_doc_max_bytes block at the top of the file;
+// null removes it. A user-owned top-level project_doc_max_bytes outside the block is never overwritten.
+export function setDocLimit(existingText, bytes) {
+  const source = existingText == null ? "" : String(existingText);
+  const eol = detectEol(source || "\n");
+  let lines = source ? source.split(/\r?\n/) : [];
+  const start = lines.findIndex((line) => line.trim() === DOC_LIMIT_START);
+  const end = lines.findIndex((line) => line.trim() === DOC_LIMIT_END);
+  if ((start < 0) !== (end < 0) || end < start) {
+    throw new CodexConfigError("CheapGPT agents-md-limit markers are malformed in .codex/config.toml.", "TOML");
+  }
+  if (start >= 0) {
+    lines = [...lines.slice(0, start), ...lines.slice(end + 1)];
+    while (lines.length && lines[0] === "") lines.shift();
+  }
+  if (bytes != null) {
+    if (topLevelLines(lines).some((line) => parseAssignment(line)?.key === "project_doc_max_bytes")) {
+      throw new CodexConfigError(
+        "project_doc_max_bytes is already set in .codex/config.toml outside CheapGPT's block. Refusing to overwrite.",
+        "TOML"
+      );
+    }
+    const block = [DOC_LIMIT_START, `project_doc_max_bytes = ${bytes}`, DOC_LIMIT_END];
+    lines = lines.some((line) => line.trim()) ? [...block, "", ...lines] : block;
+  }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines.length ? lines.join(eol) + eol : "";
+}

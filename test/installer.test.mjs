@@ -412,7 +412,7 @@ test("profiles keep their required structure and no blocking root-identity gate"
   for (const need of [/CavePrompt/, /UNRESOLVED/, /Preferred-root guidance:/, /FIX_NO_PLAN_CHANGES/, /RAPID/, /roughly 15000 tokens/]) assert.match(legacy, need);
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/## LAWS/, /## NOISE_VETO/, /## ROUTES/, /## FLOW/, /## SIGNALS/, /## LOOP-BREAKER/, /STEP BACK/, /## ROLES AND INVOCATION/, /## BOARD AND FILES/, /UNRESOLVED/, /ESCALATE/]) assert.match(text, need);
+    for (const need of [/## LAWS/, /## NOISE_VETO/, /## ROUTES/, /## FLOW/, /## BUILD MECHANICS/, /TINY LOOP/, /OUTCOMES/, /FULL STEP BACK/, /## SIGNALS/, /## ROLES AND INVOCATION/, /## BOARD AND FILES/]) assert.match(text, need);
     assert.match(text, new RegExp(`^PROFILE: ${id}\\n`));
   }
   for (const id of ["ultracheap", "cheap", "cheap-100"]) {
@@ -578,4 +578,53 @@ test("mergeMultiAgentConfig refuses dotted keys", () => {
     () => mergeMultiAgentConfig("features.multi_agent_v2.enabled = true\n"),
     /dotted-key/
   );
+});
+
+test("--agents-md-limit 96k writes project_doc_max_bytes, update keeps it, default and uninstall remove it", async () => {
+  const dir = await tempDir();
+  const config = path.join(dir, ".codex", "config.toml");
+  try {
+    await cli(dir, ["install", "--profile", "cheap", "--agents-md-limit", "96k"]);
+    let text = await readFile(config, "utf8");
+    assert.match(text, /^# cheapgpt:agents-md-limit:start\nproject_doc_max_bytes = 98304\n# cheapgpt:agents-md-limit:end\n/);
+    assert.equal((await cli(dir, ["doctor"])).ok, true);
+    await cli(dir, ["update"]);
+    text = await readFile(config, "utf8");
+    assert.equal(text.split("project_doc_max_bytes").length - 1, 1);
+    await cli(dir, ["update", "--agents-md-limit", "default"]);
+    text = await readFile(config, "utf8");
+    assert.doesNotMatch(text, /project_doc_max_bytes/);
+    await cli(dir, ["update", "--agents-md-limit", "96k"]);
+    await cli(dir, ["uninstall"]);
+    assert.equal(existsSync(config), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("--agents-md-limit refuses a user-owned project_doc_max_bytes and bad values", async () => {
+  const dir = await tempDir();
+  try {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(path.join(dir, ".codex", "config.toml"), "project_doc_max_bytes = 65536\n");
+    await assert.rejects(cli(dir, ["install", "--profile", "cheap", "--agents-md-limit", "96k"]), /already set/);
+    await assert.rejects(cli(dir, ["install", "--profile", "cheap", "--agents-md-limit", "64k"]), /96k or default/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("doctor warns when AGENTS.md exceeds Codex's read limit, and not after --agents-md-limit 96k", async () => {
+  const dir = await tempDir();
+  try {
+    await writeFile(path.join(dir, "AGENTS.md"), `# Team rules\n\n${"x".repeat(40000)}\n`);
+    await cli(dir, ["install", "--profile", "cheap"]);
+    let doctor = await cli(dir, ["doctor"]);
+    assert.ok(doctor.warnings.some((w) => /over Codex's project_doc_max_bytes \(32768\)/.test(w)));
+    await cli(dir, ["update", "--agents-md-limit", "96k"]);
+    doctor = await cli(dir, ["doctor"]);
+    assert.ok(!doctor.warnings.some((w) => /project_doc_max_bytes/.test(w)));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

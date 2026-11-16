@@ -1,6 +1,6 @@
 # CheapGPT
 
-CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The root model plans, decides, integrates and verifies. A dynamic implementer (Terra) takes every task that needs judgment, and a mechanical implementer (Luna) takes every task the handoff fully determines. Fresh reviewers check the plan and the build twice each: once when the core is done and again when it is complete. When a review fails, a fresh loop-breaker takes over a new cycle instead of letting work spiral.
+CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the root orchestrates, integrates and verifies without writing code. A dynamic implementer (Terra) takes every task that needs judgment, and a mechanical implementer (Luna) takes every task the plan fully determines. Failures are fixed in tiny loops checked by real runs. A fix that fails gets one deep diagnosis by the strongest model; if that fails too, the task stops and comes back to you instead of spiraling.
 
 This is **not** a global Codex install. It does **not** write `~/.codex`, does **not** change other repositories, and does **not** apply to every thread on your machine. It only mutates the target project folder you pass as `--project`. Every repository, worktree, or project that should use CheapGPT needs its own install into **that folder's** `AGENTS.md` (and that folder's `.codex/` hooks). If you start a new repo tomorrow, install CheapGPT there again.
 
@@ -26,7 +26,7 @@ node C:\path\to\cheapGPT\install.mjs install --project . --profile cheap
 ```
 
 5. Do not edit `AGENTS.md` yourself to insert the prompt. Do not install more than one profile. Do not dump all profiles into context.
-6. After install, tell the human: trust this project in Codex, review `/hooks`, and optionally select the profile's preferred root. An already-running Codex root continues if it differs.
+6. After install or update, tell the human: trust this project in Codex, review `/hooks`, and switch the root model to the profile's recommended root (`cheap`: `gpt-6.1-sol` medium; `cheap-100`: `gpt-6.1-sol` xhigh). An already-running Codex root continues if it differs.
 
 ### Update an existing CheapGPT install
 
@@ -38,7 +38,7 @@ node /path/to/cheapGPT/install.mjs update --project .
 node /path/to/cheapGPT/install.mjs doctor --project .
 ```
 
-Stop before writing if markers are malformed or `update` reports a hand-modified managed block (review, then `--force` only if intended). After a successful update, tell the human to re-review/trust `/hooks` because the hook definition hash changed, then start a fresh turn. `doctor` validates installed files against this checkout; it is not evidence that Codex executed a heartbeat on a given turn.
+Stop before writing if markers are malformed or `update` reports a hand-modified managed block (review, then `--force` only if intended). After a successful update, tell the human to re-review/trust `/hooks` because the hook definition hash changed, recommend the profile's root model (step 6), then start a fresh turn. `doctor` validates installed files against this checkout; it is not evidence that Codex executed a heartbeat on a given turn.
 
 Sibling checkout example (CheapGPT next to the app):
 
@@ -73,7 +73,7 @@ Written into the target project:
 ```text
 AGENTS.md                         # bounded CheapGPT block appended or replaced
 .cheapgpt/state.json              # profile, hashes, hook mode
-.codex/config.toml                # project-local MultiAgent V2 wait backstop
+.codex/config.toml                # project-local MultiAgent V2 wait backstop (+ optional AGENTS.md limit)
 .codex/hooks.json                 # CheapGPT entries merged; other hooks kept
 .codex/hooks/cheapgpt-turn.mjs    # heartbeat + compact recovery
 ```
@@ -84,7 +84,7 @@ While a task runs, the root also keeps `cheapgpt/plan.md` (the board) and `tempo
 
 Install **exactly one**. They are mutually exclusive.
 
-| Profile | Account | Use when | Root | Dynamic (Terra) | Mechanical (Luna) | Reviewers | Loop-breaker | Board budget |
+| Profile | Account | Use when | Root | Dynamic (Terra) | Mechanical (Luna) | Reviewers | Planner and loop-breaker | Board budget |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 | `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | `gpt-6.1-terra` medium | `gpt-6-luna` max | `gpt-6.1-sol` medium | `gpt-6.1-sol` xhigh | 20,000 |
 | `cheap-100` | ChatGPT Pro | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | `gpt-6.1-terra` max | `gpt-6-luna` max | `gpt-6.1-sol` xhigh | `gpt-6-astra` xhigh | 25,000 |
@@ -100,14 +100,12 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
    - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, with no children and no board.
    - FOCUSED: known mechanism.
    - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output.
-2. **PLAN.** The root writes the acceptance list and the mechanism (the core plan), which a fresh reviewer checks. Then it writes the handoffs (the complete plan), which a new fresh reviewer checks.
-3. **BUILD.** Terra and Luna build the core path first, which gets a review. Then they build the rest, which gets a terminal review. A repair that doesn't fix the problem is reverted, and the root goes back to PLAN instead of patching again.
-4. **Reviews.** Core reviews return `PASS`, `FIX` or `ESCALATE`; terminal reviews return `PASS` or `UNRESOLVED`. A finding counts only with a criterion, evidence and one action.
-5. **Loop-breaking.**
-   - Any terminal `UNRESOLVED` starts a new cycle led by a fresh loop-breaker.
-   - Two loop-breaker cycles without a pass, or one without significant advance (more acceptance criteria passing on a real run), lead to one **step back**: a big-picture review that names the step at fault and replans from there.
-   - After two more cycles without a pass, the task stops **BLOCKED** with EXPLORE/RESEARCH options for you.
-6. **Issue report.** After a task that needed a loop-breaker, the step back, or more than two fix rounds on one review finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
+2. **PLAN.** The planner, the strongest model in the profile (the loop-breaker model), writes the acceptance list, the mechanism and the handoffs. On a project with existing code a fresh reviewer checks the plan once; on a new project the first real run is the test.
+3. **BUILD.** Terra and Luna build the core first and run it on real input; a fresh reviewer checks it right away. Then they build the rest, and a final review checks everything after one last real run.
+4. **Tiny loops.** Each failure is fixed in a tiny loop: the root reproduces it, briefs one fix with a test that fails before the fix, and checks it on a real run. No reviewer inside the loop.
+5. **Full step back.** A fix that fails, a stall or a bad core goes to a fresh loop-breaker. It diagnoses from the big picture and makes one fix: a corrected brief, its own tiny loop, or a rewritten plan.
+6. **Back to you.** If that fix fails too, the task stops **BLOCKED** with EXPLORE/RESEARCH options. Worst case: one full step back per criterion, then you decide.
+7. **Issue report.** After a task that needed a full step back finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
 
 ## Install / update / doctor / uninstall
 
@@ -129,7 +127,19 @@ Useful flags:
 --json          machine-readable output
 --no-hooks      AGENTS.md only (no Codex heartbeat/recovery)
 --hooks         install hooks (default)
+--agents-md-limit 96k|default
+                raise Codex's AGENTS.md read limit for this project to 96 KiB, or restore 32 KiB
 ```
+
+### Large AGENTS.md files
+
+Codex reads at most 32 KiB of `AGENTS.md` per project (`project_doc_max_bytes`) and silently drops the rest. The cheap profiles take about 18 KB, so a long `AGENTS.md` of your own can push CheapGPT's rules past the cut. `doctor` warns when that happens. Fix it with:
+
+```bash
+node /path/to/cheapGPT/install.mjs update --project . --agents-md-limit 96k
+```
+
+This writes `project_doc_max_bytes = 98304` into the project's `.codex/config.toml` (Codex applies it to trusted projects). `--agents-md-limit default` removes it, and so does `uninstall`.
 
 `--global` is rejected on purpose.
 
