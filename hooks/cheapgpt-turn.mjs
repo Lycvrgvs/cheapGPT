@@ -52,7 +52,7 @@ function heartbeatContext(state, event) {
   const lines = [
     `CHEAPGPT HEARTBEAT: hook executed for current turn_id=${id}. CHEAPGPT ACTIVE: profile=${state.profile} preferred_root="${state.root}" planner="${state.planner}" reviewer="${state.reviewer}" sha=${sha}. Apply the repository CheapGPT orchestration policy to this turn. If the current managed block is unavailable in active context, recover it from AGENTS.md before planning, delegation, or implementation. If asked whether the CheapGPT hook executed for this turn, this heartbeat is direct runtime evidence. Confirm it without falling back to "I cannot verify whether Codex ran the hook."`,
     state.planningMode,
-    "Default this turn: if the user started a new feature or debug and no durable plan exists, plan first (RAPID or FULL, no edits) unless they overrode; if a durable plan already exists for this task, implement under the assigned roles.",
+    "Default this turn: state the route line first, with the routes your profile names, unless the user overrode; if this task has no durable plan, plan before editing; if it has one, continue from its Next line under the assigned roles.",
   ];
   if (model) {
     lines.push(
@@ -67,7 +67,7 @@ function recoveryContext(state, block) {
     "CHEAPGPT RECOVERY: SessionStart source=compact succeeded. Rehydrate and follow this exact managed CheapGPT policy before planning, delegation, or implementation.",
     block,
     state.planningMode,
-    "Default after recovery: if no durable plan exists for the current task, plan first (RAPID or FULL, no edits) unless the user overrode; otherwise continue implementation under the assigned roles.",
+    "Default after recovery: continue from the Next line of the current task's durable plan; if there is none, state the route line first, with the routes your profile names, and plan before editing unless the user overrode.",
   ];
   return parts.filter(Boolean).join("\n\n");
 }

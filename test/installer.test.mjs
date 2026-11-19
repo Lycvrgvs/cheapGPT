@@ -628,3 +628,45 @@ test("doctor warns when AGENTS.md exceeds Codex's read limit, and not after --ag
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("profiles/roles.json matches the profiles and marks one dynamic and one mechanical builder", async () => {
+  const { rolesText, buildRoles } = await import("../tools/roles.mjs");
+  const published = await readFile(path.join(ROOT, "profiles", "roles.json"), "utf8");
+  assert.equal(published, rolesText(ROOT));
+  const roles = buildRoles(ROOT);
+  assert.deepEqual(Object.keys(roles.profiles), ["cheap", "cheap-100"]);
+  for (const id of ["cheap", "cheap-100"]) {
+    const builders = roles.profiles[id].filter((r) => r.builder);
+    assert.deepEqual(builders.map((r) => r.builder).sort(), ["dynamic", "mechanical"]);
+    for (const r of builders) assert.ok(r.model && r.effort && r.runAs);
+  }
+});
+
+test("install and update stop before writing when cLoop is installed", async () => {
+  const withState = await tempDir();
+  const withBlock = await tempDir();
+  const withHook = await tempDir();
+  try {
+    await mkdir(path.join(withState, ".cloop"), { recursive: true });
+    await writeFile(path.join(withState, ".cloop", "state.json"), "{}\n");
+    await assert.rejects(cli(withState, ["install", "--profile", "cheap"]), (err) => {
+      assert.match(err.message, /cLoop is installed in this project/);
+      assert.match(err.message, /--builders cheap/);
+      assert.match(err.message, /install\.mjs uninstall --project \./);
+      return true;
+    });
+    assert.equal(existsSync(path.join(withState, ".cheapgpt")), false);
+    assert.equal(existsSync(path.join(withState, "AGENTS.md")) || existsSync(path.join(withState, "CLAUDE.md")), false);
+
+    await writeFile(path.join(withBlock, "AGENTS.md"), "<!-- cloop:managed:start -->\nx\n<!-- cloop:managed:end -->\n");
+    await assert.rejects(cli(withBlock, ["install", "--profile", "cheap-100"]), /cloop:managed block in AGENTS\.md[\s\S]*--builders cheap-100/);
+    assert.equal(existsSync(path.join(withBlock, ".cheapgpt")), false);
+
+    await cli(withHook, ["install", "--profile", "cheap"]);
+    await mkdir(path.join(withHook, ".claude", "hooks"), { recursive: true });
+    await writeFile(path.join(withHook, ".claude", "hooks", "cloop-turn.mjs"), "\n");
+    await assert.rejects(cli(withHook, ["update"]), /cLoop is installed in this project/);
+  } finally {
+    for (const dir of [withState, withBlock, withHook]) await rm(dir, { recursive: true, force: true });
+  }
+});

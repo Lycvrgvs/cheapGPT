@@ -12,6 +12,8 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { cloopMessage, detectCloop } from "./cloop-guard.mjs";
+
 import {
   DOC_LIMIT_96K,
   doctorCodexConfig,
@@ -21,7 +23,7 @@ import {
   setDocLimit,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.8.2";
+export const PACKAGE_VERSION = "1.8.4";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
@@ -717,6 +719,14 @@ async function writeInstallation({
   return { dryRun: false, ...planned, state: nextState };
 }
 
+async function refuseCloop(projectRoot, profileId, sourceRoot) {
+  const found = await detectCloop(projectRoot);
+  if (found.length) {
+    const catalog = await loadCatalog(sourceRoot);
+    throw new CheapgptError(cloopMessage(found, catalog.harness, profileId), "CLOOP");
+  }
+}
+
 async function cmdInstall(args, sourceRoot = HERE) {
   const profileId = resolveProfileId(args.profile);
   if (!profileId) {
@@ -727,6 +737,7 @@ async function cmdInstall(args, sourceRoot = HERE) {
   }
   const paths = projectPaths(args.project);
   const inspect = await inspectProject(paths);
+  await refuseCloop(paths.root, profileId, sourceRoot);
   requireUnmodified(inspect, args.force, "install");
   const profile = await loadProfile(profileId, sourceRoot);
   const hookMode = args.hooks ? "codex" : "none";
@@ -749,6 +760,7 @@ async function cmdUpdate(args, sourceRoot = HERE) {
       "MISSING"
     );
   }
+  await refuseCloop(paths.root, resolveProfileId(args.profile) || resolveProfileId(inspect.state?.profile), sourceRoot);
   requireUnmodified(inspect, args.force, "update");
   const profileId = resolveProfileId(args.profile) || resolveProfileId(inspect.state?.profile);
   if (!resolveProfileId(profileId)) {

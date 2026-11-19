@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "package": "cheapGPT",
+  "version": "1.8.4",
+  "edition": "main",
+  "harness": "codex",
+  "profiles": {
+    "cheap": [
+      {
+        "role": "Root",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "runAs": "this session"
+      },
+      {
+        "role": "Terra (dynamic implementer)",
+        "model": "gpt-6.1-terra",
+        "effort": "medium",
+        "runAs": "persistent child, inherits conversation",
+        "builder": "dynamic"
+      },
+      {
+        "role": "Luna (mechanical implementer)",
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "runAs": "persistent child, inherits conversation",
+        "builder": "mechanical"
+      },
+      {
+        "role": "Reviewer",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "runAs": "fresh child per review"
+      },
+      {
+        "role": "Planner and loop-breaker",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "runAs": "planner: persistent child, inherits conversation; loop-breaker: fresh child per full step back"
+      }
+    ],
+    "cheap-100": [
+      {
+        "role": "Root",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "runAs": "this session"
+      },
+      {
+        "role": "Terra (dynamic implementer)",
+        "model": "gpt-6.1-terra",
+        "effort": "max",
+        "runAs": "persistent child, inherits conversation",
+        "builder": "dynamic"
+      },
+      {
+        "role": "Luna (mechanical implementer)",
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "runAs": "persistent child, inherits conversation",
+        "builder": "mechanical"
+      },
+      {
+        "role": "Reviewer",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "runAs": "fresh child per review"
+      },
+      {
+        "role": "Planner and loop-breaker",
+        "model": "gpt-6-astra",
+        "effort": "xhigh",
+        "runAs": "planner: persistent child, inherits conversation; loop-breaker: fresh child per full step back"
+      }
+    ]
+  }
+}
