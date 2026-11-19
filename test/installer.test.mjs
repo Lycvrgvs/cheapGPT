@@ -523,6 +523,23 @@ enabled = true
   }
 });
 
+test("update keeps the CheapGPT-created multi-agent table across repeated updates", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "cheap"]);
+    for (let i = 0; i < 3; i += 1) {
+      await cli(dir, ["update"]);
+      const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
+      assert.equal(toml.split("[features.multi_agent_v2]").length - 1, 1);
+      assert.match(toml, /default_wait_timeout_ms = 1800000/);
+      const doctor = await cli(dir, ["doctor"]);
+      assert.equal(doctor.ok, true);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("conflicting multi-agent values fail without rewriting config", async () => {
   const dir = await tempDir();
   try {

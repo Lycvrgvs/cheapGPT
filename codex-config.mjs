@@ -113,24 +113,27 @@ function findMarkerRange(lines) {
   return { start, end };
 }
 
-function collectKeys(lines, from, to, skipMarkers = false) {
+function collectKeys(lines, from, to) {
   const keys = new Map();
-  let inManaged = false;
   for (let i = from; i < to; i += 1) {
-    const trimmed = lines[i].trim();
-    if (trimmed === TOML_START) {
-      inManaged = true;
-      continue;
-    }
-    if (trimmed === TOML_END) {
-      inManaged = false;
-      continue;
-    }
-    if (skipMarkers && inManaged) continue;
     const parsed = parseAssignment(lines[i]);
     if (parsed) keys.set(parsed.key, parsed);
   }
   return keys;
+}
+
+function collectUserKeys(lines, table, markers) {
+  const keys = new Map();
+  for (let i = table.start + 1; i < table.end; i += 1) {
+    if (markers && i >= markers.start && i <= markers.end) continue;
+    const parsed = parseAssignment(lines[i]);
+    if (parsed) keys.set(parsed.key, parsed);
+  }
+  return keys;
+}
+
+function markerRangeHoldsHeader(markers, table) {
+  return Boolean(markers && table && markers.start < table.start && table.start <= markers.end);
 }
 
 function managedKeyLines(keys) {
@@ -156,9 +159,9 @@ export function inspectCodexConfig(text) {
   const lines = source.split(/\r?\n/);
   const table = findTableRange(lines);
   const markers = findMarkerRange(lines);
-  const userKeys = table ? collectKeys(lines, table.start + 1, table.end, true) : new Map();
+  const userKeys = table ? collectUserKeys(lines, table, markers) : new Map();
   const managed = markers
-    ? collectKeys(lines, markers.start + 1, markers.end, false)
+    ? collectKeys(lines, markers.start + 1, markers.end)
     : new Map();
   const effective = {};
   for (const [key, parsed] of userKeys) effective[key] = parsed.value;
@@ -173,7 +176,7 @@ export function inspectCodexConfig(text) {
     userKeys,
     managed,
     effective,
-    createdTable: Boolean(markers && table && markers.start < table.start),
+    createdTable: markerRangeHoldsHeader(markers, table),
   };
 }
 
@@ -213,7 +216,7 @@ export function mergeMultiAgentConfig(existingText) {
     };
   }
 
-  const userKeys = collectKeys(lines, table.start + 1, table.end, true);
+  const userKeys = collectUserKeys(lines, table, markers);
   const missing = [];
   for (const key of REQUIRED_KEYS) {
     if (!userKeys.has(key)) {
@@ -228,7 +231,12 @@ export function mergeMultiAgentConfig(existingText) {
     }
   }
 
-  const managedLines = missing.length ? [TOML_START, ...managedKeyLines(missing), TOML_END] : [];
+  const markerHoldsHeader = markerRangeHoldsHeader(markers, table);
+  const managedBody = [
+    ...(markerHoldsHeader ? [TABLE_HEADER] : []),
+    ...managedKeyLines(missing),
+  ];
+  const managedLines = managedBody.length ? [TOML_START, ...managedBody, TOML_END] : [];
 
   if (!markers && missing.length === 0) {
     return {
@@ -256,7 +264,7 @@ export function mergeMultiAgentConfig(existingText) {
   return {
     text: next,
     createdFile: false,
-    createdTable: false,
+    createdTable: markerHoldsHeader,
     managedKeys: missing,
   };
 }
