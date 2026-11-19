@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "package": "cheapGPT",
+  "version": "1.8.4",
+  "edition": "exp",
+  "harness": "claude-exp",
+  "profiles": {
+    "cheap": [
+      {
+        "role": "Root",
+        "model": "Opus 5.5",
+        "effort": "medium",
+        "runAs": "this session"
+      },
+      {
+        "role": "Terra (dynamic implementer)",
+        "model": "gpt-6.1-terra",
+        "effort": "medium",
+        "runAs": "persistent `codex exec` session",
+        "builder": "dynamic"
+      },
+      {
+        "role": "Luna (mechanical implementer)",
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "runAs": "persistent `codex exec` session",
+        "builder": "mechanical"
+      },
+      {
+        "role": "Reviewer",
+        "model": "Opus 5.5",
+        "effort": "medium",
+        "runAs": "fresh subagent per review",
+        "alias": "opus"
+      },
+      {
+        "role": "Planner and loop-breaker",
+        "model": "Opus 5.5",
+        "effort": "xhigh",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "alias": "opus"
+      }
+    ],
+    "cheap-100": [
+      {
+        "role": "Root",
+        "model": "Opus 5.5",
+        "effort": "medium",
+        "runAs": "this session"
+      },
+      {
+        "role": "Terra (dynamic implementer)",
+        "model": "gpt-6.1-terra",
+        "effort": "max",
+        "runAs": "persistent `codex exec` session",
+        "builder": "dynamic"
+      },
+      {
+        "role": "Luna (mechanical implementer)",
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "runAs": "persistent `codex exec` session",
+        "builder": "mechanical"
+      },
+      {
+        "role": "Reviewer",
+        "model": "Opus 5.5",
+        "effort": "medium",
+        "runAs": "fresh subagent per review",
+        "alias": "opus"
+      },
+      {
+        "role": "Planner and loop-breaker",
+        "model": "Fable 5.1",
+        "effort": "xhigh",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "alias": "fable"
+      }
+    ]
+  }
+}
