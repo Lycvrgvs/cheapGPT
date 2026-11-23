@@ -135,7 +135,7 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     const agents = await readFile(path.join(dir, "CLAUDE.md"), "utf8");
     assert.match(agents, /Keep me\./);
     assert.match(agents, /gpt-6\.1-terra, max/);
-    assert.match(agents, /mechanical implementer/);
+    assert.match(agents, /mechanical builder/);
     assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
@@ -405,7 +405,7 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
 test("claude profiles keep their structure and use only Claude Code mechanics", async () => {
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/## LAWS/, /## NOISE_VETO/, /## BUILD MECHANICS/, /TINY LOOP/, /FULL STEP BACK/, /## ROLES AND INVOCATION/, /native `Agent` tool/]) assert.match(text, need);
+    for (const need of [/## FLOW/, /END_FLOW/, /## MECHANICS/, /END_MECHANICS/, /## LAWS/, /## NOISE_VETO/, /## SIGNALS/, /\.cheapgpt\/cheapgpt\.mjs/, /The step back/, /native `Agent` tool/]) assert.match(text, need);
     for (const bad of [/spawn_agent/, /fork_turns/, /wait_agent/, /gpt-6\.1-sol/, /Astra/, /AGENTS\.md/]) assert.doesNotMatch(text, bad);
   }
 });
@@ -425,7 +425,7 @@ test("catalog carries one turn reminder per profile and no full modes", async ()
 test("exp profiles route implementers through Codex CLI", async () => {
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/gpt-6\.1-terra/, /gpt-6-luna, max/, /codex exec resume/, /temporary\/runs\//]) assert.match(text, need);
+    for (const need of [/gpt-6\.1-terra/, /gpt-6-luna, max/, /codex exec resume/, /cheapgpt\/runs\//]) assert.match(text, need);
   }
   assert.equal(existsSync(path.join(ROOT, "profiles", "ultracheap.md")), false);
 });
@@ -521,5 +521,28 @@ test("install and update stop before writing when cLoop is installed", async () 
     await assert.rejects(cli(withHook, ["update"]), /cLoop is installed in this project/);
   } finally {
     for (const dir of [withState, withBlock, withHook]) await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("install copies the flow tool, doctor checks it, update refreshes it, uninstall removes it", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "cheap"]);
+    const tool = path.join(dir, ".cheapgpt", "cheapgpt.mjs");
+    const source = await readFile(path.join(ROOT, "cheapgpt.mjs"), "utf8");
+    assert.equal(await readFile(tool, "utf8"), source);
+    assert.equal((await cli(dir, ["doctor"])).ok, true);
+    await writeFile(tool, "// stale\n");
+    const stale = await cli(dir, ["doctor"]);
+    assert.ok(stale.warnings.some((w) => /cheapgpt\.mjs does not match current sources/.test(w)));
+    await rm(tool);
+    assert.ok((await cli(dir, ["doctor"])).issues.some((i) => /missing \.cheapgpt\/cheapgpt\.mjs/.test(i)));
+    await cli(dir, ["update"]);
+    assert.equal(await readFile(tool, "utf8"), source);
+    await cli(dir, ["uninstall"]);
+    assert.equal(existsSync(tool), false);
+    assert.equal(existsSync(path.join(dir, ".cheapgpt")), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

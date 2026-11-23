@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "cheapGPT",
-  "version": "1.8.4",
+  "version": "1.9.0",
   "edition": "exp",
   "harness": "claude-exp",
   "profiles": {
@@ -13,14 +13,14 @@
         "runAs": "this session"
       },
       {
-        "role": "Terra (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "gpt-6.1-terra",
         "effort": "medium",
         "runAs": "persistent `codex exec` session",
         "builder": "dynamic"
       },
       {
-        "role": "Luna (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "gpt-6-luna",
         "effort": "max",
         "runAs": "persistent `codex exec` session",
@@ -37,7 +37,7 @@
         "role": "Planner and loop-breaker",
         "model": "Opus 5.5",
         "effort": "xhigh",
-        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back or re-plan",
         "alias": "opus"
       }
     ],
@@ -49,14 +49,14 @@
         "runAs": "this session"
       },
       {
-        "role": "Terra (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "gpt-6.1-terra",
         "effort": "max",
         "runAs": "persistent `codex exec` session",
         "builder": "dynamic"
       },
       {
-        "role": "Luna (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "gpt-6-luna",
         "effort": "max",
         "runAs": "persistent `codex exec` session",
@@ -73,7 +73,7 @@
         "role": "Planner and loop-breaker",
         "model": "Fable 5.1",
         "effort": "xhigh",
-        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back or re-plan",
         "alias": "fable"
       }
     ]

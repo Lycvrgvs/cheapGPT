@@ -43,7 +43,7 @@ function heartbeatContext(state, event) {
   const lines = [
     `CheapGPT heartbeat: the CheapGPT hook ran for prompt_id=${id}. Active profile=${state.profile}; preferred root=${state.root}; planner=${state.planner}; reviewer=${state.reviewer}; block sha=${sha}. The CheapGPT orchestration policy in ${file} applies to this turn; if it is not in context, re-read the managed block from ${file} before planning, delegation, or implementation. This heartbeat is direct evidence that the hook ran for this prompt.`,
     state.planningMode,
-    "Default this turn: state the route line first, with the routes your profile names, unless the user overrode; if this task has no durable plan, plan before editing; if it has one, continue from its Next line under the assigned roles.",
+    "Default this turn: state the route line first, with the routes your profile names, unless the user overrode; for a task in progress, resume from the task state your policy names before acting.",
   ];
   if (event && event.model) {
     lines.push(`Harness model: ${event.model}. Preferred profile root: ${state.root}. The harness model identity is authoritative and the profile root is advisory; continue with the current root and do not request substitute-root approval because the labels differ.`);
@@ -54,9 +54,9 @@ function heartbeatContext(state, event) {
 function recoveryContext(state) {
   const file = state.instructionFile || "CLAUDE.md";
   return [
-    `CheapGPT recovery: SessionStart source=compact. The CheapGPT managed block in ${file} is authoritative; re-read it from ${file} now, even if it seems to be in context, before planning, delegation, or implementation, and reread cheapgpt/plan.md if present.`,
+    `CheapGPT recovery: SessionStart source=compact. The CheapGPT managed block in ${file} is authoritative; re-read it from ${file} now, even if it seems to be in context, before planning, delegation, or implementation, then resume from the task state the policy names.`,
     state.planningMode,
-    "Default after recovery: continue from the Next line of the current task's durable plan; if there is none, state the route line first, with the routes your profile names, and plan before editing unless the user overrode.",
+    "Default after recovery: resume from the task state your policy names; if there is no task, state the route line first, with the routes your profile names, unless the user overrode.",
   ].filter(Boolean).join("\n\n");
 }
 
