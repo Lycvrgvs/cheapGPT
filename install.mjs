@@ -15,12 +15,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cloopMessage, detectCloop } from "./cloop-guard.mjs";
 
-export const PACKAGE_VERSION = "1.8.4";
+export const PACKAGE_VERSION = "1.9.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
 export const HOOK_TAG = "cheapgpt:";
 export const HOOK_SCRIPT_NAME = "cheapgpt-turn.mjs";
+export const TOOL_NAME = "cheapgpt.mjs"; // the flow tool the cheap profiles run, installed at .cheapgpt/cheapgpt.mjs
 export const INSTRUCTION_FILE = "CLAUDE.md";
 export const HOOK_MODE = "claude";
 export const CODEX_PERMISSION = "Bash(codex exec:*)";
@@ -199,6 +200,7 @@ function projectPaths(projectRoot) {
     root: projectRoot,
     agents: path.join(projectRoot, INSTRUCTION_FILE), // instruction file (CLAUDE.md); property name kept for a minimal diff
     stateDir: path.join(projectRoot, ".cheapgpt"),
+    tool: path.join(projectRoot, ".cheapgpt", TOOL_NAME),
     state: path.join(projectRoot, ".cheapgpt", "state.json"),
     claudeDir: path.join(projectRoot, ".claude"),
     hooksDir: path.join(projectRoot, ".claude", "hooks"),
@@ -616,7 +618,7 @@ async function writeInstallation({
     instructionFile: INSTRUCTION_FILE,
     hookMode,
     managedBlockSha256: nextState.managedBlockSha256,
-    writes: [INSTRUCTION_FILE, ".cheapgpt/state.json"],
+    writes: [INSTRUCTION_FILE, ".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`],
   };
   if (hookMode === HOOK_MODE) {
     planned.writes.push(".claude/settings.json", `.claude/hooks/${HOOK_SCRIPT_NAME}`);
@@ -631,6 +633,7 @@ async function writeInstallation({
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
+    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -653,6 +656,8 @@ async function writeInstallation({
     if (hookMode !== HOOK_MODE && inspect.hasHookScript) {
       await rm(paths.hookScript, { force: true });
     }
+    await mkdir(paths.stateDir, { recursive: true });
+    await copyFile(path.join(HERE, TOOL_NAME), paths.tool);
     await maybeFail("state");
     await atomicWrite(paths.state, `${JSON.stringify(nextState, null, 2)}\n`);
   } catch (err) {
@@ -742,7 +747,7 @@ async function cmdUninstall(args) {
   }
 
   const planned = {
-    removes: [".cheapgpt/state.json"],
+    removes: [".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`],
     writes: [],
   };
   if (inspect.hasAgents) planned.writes.push(INSTRUCTION_FILE);
@@ -755,6 +760,7 @@ async function cmdUninstall(args) {
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
+    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -780,6 +786,7 @@ async function cmdUninstall(args) {
       else await atomicWrite(paths.hooksJson, nextHooksJson);
     }
     await maybeFail("state");
+    await rm(paths.tool, { force: true });
     await rm(paths.state, { force: true });
     if (existsSync(paths.stateDir)) {
       try {
@@ -843,6 +850,19 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
   const agentsMd = await readTextIfExists(path.join(projectRoot, "AGENTS.md"));
   if (inspect.agents && inspect.agents.includes("@AGENTS.md") && agentsMd && agentsMd.includes(START_MARKER)) {
     warnings.push("CLAUDE.md imports an AGENTS.md that holds a CheapGPT block; both policies would load");
+  }
+
+  if (state) {
+    const installedTool = await readTextIfExists(paths.tool);
+    if (installedTool == null) issues.push(`missing .cheapgpt/${TOOL_NAME}`);
+    else {
+      try {
+        const expectedTool = await readFile(path.join(sourceRoot, TOOL_NAME), "utf8");
+        if (sha256(installedTool) !== sha256(expectedTool)) warnings.push(`installed .cheapgpt/${TOOL_NAME} does not match current sources; run update`);
+      } catch {
+        warnings.push(`could not compare .cheapgpt/${TOOL_NAME} to current sources`);
+      }
+    }
   }
 
   const hookCounts = cheapgptHookCount(inspect.hooksJson);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates profiles/roles.json, the published roles table that cLoop reads for its --builders option.
-// It is derived from the ROLES AND INVOCATION table of profiles/cheap.md and profiles/cheap-100.md.
+// It is derived from the roles table (header "| Role | Model | Run as | Does |") of profiles/cheap.md and profiles/cheap-100.md.
 //
 //   node tools/roles.mjs           write profiles/roles.json
 //   node tools/roles.mjs --check   exit 1 if profiles/roles.json is out of date
@@ -13,21 +13,22 @@ const PROFILES = ["cheap", "cheap-100"];
 const EDITION = { codex: "main", "claude-exp": "exp", claude: "claude-edition" };
 
 export function parseRoles(profileText) {
-  const start = profileText.indexOf("\n## ROLES AND INVOCATION\n");
-  if (start < 0) throw new Error("no ROLES AND INVOCATION section");
-  const end = profileText.indexOf("\n## ", start + 1);
-  const rows = profileText
-    .slice(start, end < 0 ? undefined : end)
-    .split("\n")
-    .filter((line) => line.startsWith("| ") && !line.startsWith("| Role |"));
+  const lines = profileText.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("| Role | Model | Run as |"));
+  if (start < 0) throw new Error("no roles table");
+  const rows = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith("|")) break;
+    if (!/^\|\s*-/.test(line)) rows.push(line);
+  }
   return rows.map((line) => {
     const [role, modelCell, runAs] = line.split(" | ").map((cell) => cell.replace(/^\| /, "").trim());
     const m = modelCell.match(/^(.+?), (\S+)(?: \((?:`([^`]+)`|recommended)\))?$/);
     if (!m) throw new Error(`cannot parse model cell: ${modelCell}`);
     const entry = { role, model: m[1], effort: m[2], runAs };
     if (m[3]) entry.alias = m[3];
-    if (/\(dynamic implementer\)/.test(role)) entry.builder = "dynamic";
-    if (/\(mechanical implementer\)/.test(role)) entry.builder = "mechanical";
+    if (/^dynamic builder$/i.test(role)) entry.builder = "dynamic";
+    if (/^mechanical builder$/i.test(role)) entry.builder = "mechanical";
     return entry;
   });
 }

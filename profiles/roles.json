@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "cheapGPT",
-  "version": "1.8.4",
+  "version": "1.9.0",
   "edition": "claude-edition",
   "harness": "claude",
   "profiles": {
@@ -13,7 +13,7 @@
         "runAs": "this session"
       },
       {
-        "role": "Sonnet (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "Sonnet 5.5",
         "effort": "medium",
         "runAs": "persistent subagent, seeded with a conversation packet",
@@ -21,7 +21,7 @@
         "builder": "dynamic"
       },
       {
-        "role": "Haiku (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "Haiku 5.5",
         "effort": "xhigh",
         "runAs": "persistent subagent, seeded with a conversation packet",
@@ -39,7 +39,7 @@
         "role": "Planner and loop-breaker",
         "model": "Opus 5.5",
         "effort": "xhigh",
-        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back or re-plan",
         "alias": "opus"
       }
     ],
@@ -51,7 +51,7 @@
         "runAs": "this session"
       },
       {
-        "role": "Sonnet (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "Sonnet 5.5",
         "effort": "xhigh",
         "runAs": "persistent subagent, seeded with a conversation packet",
@@ -59,7 +59,7 @@
         "builder": "dynamic"
       },
       {
-        "role": "Haiku (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "Haiku 5.5",
         "effort": "xhigh",
         "runAs": "persistent subagent, seeded with a conversation packet",
@@ -77,7 +77,7 @@
         "role": "Planner and loop-breaker",
         "model": "Fable 5.1",
         "effort": "xhigh",
-        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back",
+        "runAs": "planner: persistent subagent, seeded with a conversation packet; loop-breaker: fresh subagent per full step back or re-plan",
         "alias": "fable"
       }
     ]
