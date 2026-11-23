@@ -23,12 +23,13 @@ import {
   setDocLimit,
 } from "./codex-config.mjs";
 
-export const PACKAGE_VERSION = "1.8.4";
+export const PACKAGE_VERSION = "1.9.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
 export const HOOK_TAG = "cheapgpt:";
 export const HOOK_SCRIPT_NAME = "cheapgpt-turn.mjs";
+export const TOOL_NAME = "cheapgpt.mjs"; // the flow tool the cheap profiles run, installed at .cheapgpt/cheapgpt.mjs
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROFILE_ALIASES = {
@@ -216,6 +217,7 @@ function projectPaths(projectRoot) {
     root: projectRoot,
     agents: path.join(projectRoot, "AGENTS.md"),
     stateDir: path.join(projectRoot, ".cheapgpt"),
+    tool: path.join(projectRoot, ".cheapgpt", TOOL_NAME),
     state: path.join(projectRoot, ".cheapgpt", "state.json"),
     codexDir: path.join(projectRoot, ".codex"),
     hooksDir: path.join(projectRoot, ".codex", "hooks"),
@@ -666,7 +668,7 @@ async function writeInstallation({
     instructionFile: "AGENTS.md",
     hookMode,
     managedBlockSha256: nextState.managedBlockSha256,
-    writes: ["AGENTS.md", ".cheapgpt/state.json", ".codex/config.toml"],
+    writes: ["AGENTS.md", ".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`, ".codex/config.toml"],
   };
   if (hookMode === "codex") {
     planned.writes.push(".codex/hooks.json", `.codex/hooks/${HOOK_SCRIPT_NAME}`);
@@ -681,6 +683,7 @@ async function writeInstallation({
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
+    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -709,6 +712,8 @@ async function writeInstallation({
         await rm(paths.hookScript, { force: true });
       }
     }
+    await mkdir(paths.stateDir, { recursive: true });
+    await copyFile(path.join(HERE, TOOL_NAME), paths.tool);
     await maybeFail("state");
     await atomicWrite(paths.state, `${JSON.stringify(nextState, null, 2)}\n`);
   } catch (err) {
@@ -797,7 +802,7 @@ async function cmdUninstall(args) {
     : null;
 
   const planned = {
-    removes: [".cheapgpt/state.json"],
+    removes: [".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`],
     writes: [],
   };
   if (inspect.hasAgents) planned.writes.push("AGENTS.md");
@@ -811,6 +816,7 @@ async function cmdUninstall(args) {
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
+    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -854,6 +860,7 @@ async function cmdUninstall(args) {
       }
     }
     await maybeFail("state");
+    await rm(paths.tool, { force: true });
     await rm(paths.state, { force: true });
     if (existsSync(paths.stateDir)) {
       try {
@@ -927,6 +934,19 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
       warnings.push(
         `AGENTS.md is ${agentsBytes} bytes, over Codex's project_doc_max_bytes (${limit}); Codex silently drops the rest. Run update with --agents-md-limit 96k`
       );
+    }
+  }
+
+  if (state) {
+    const installedTool = await readTextIfExists(paths.tool);
+    if (installedTool == null) issues.push(`missing .cheapgpt/${TOOL_NAME}`);
+    else {
+      try {
+        const expectedTool = await readFile(path.join(sourceRoot, TOOL_NAME), "utf8");
+        if (sha256(installedTool) !== sha256(expectedTool)) warnings.push(`installed .cheapgpt/${TOOL_NAME} does not match current sources; run update`);
+      } catch {
+        warnings.push(`could not compare .cheapgpt/${TOOL_NAME} to current sources`);
+      }
     }
   }
 

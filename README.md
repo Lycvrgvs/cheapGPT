@@ -1,6 +1,6 @@
 # CheapGPT
 
-CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the root orchestrates, integrates and verifies without writing code. A dynamic implementer (Terra) takes every task that needs judgment, and a mechanical implementer (Luna) takes every task the plan fully determines. Failures are fixed in tiny loops checked by real runs. A fix that fails gets one deep diagnosis by the strongest model; if that fails too, the task stops and comes back to you instead of spiraling.
+CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the root orchestrates, integrates and verifies without writing code. A dynamic builder (gpt-6.1-terra) takes every task that needs judgment, and a mechanical builder (gpt-6-luna) takes every task the plan fully determines. Every build is a tiny loop: a step back, the builders in parallel, a merge, a real run and a fresh review. A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. From 1.9.0 a small tool, `.cheapgpt/cheapgpt.mjs`, enforces the flow: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code, and the prompt keeps only judgment.
 
 This is **not** a global Codex install. It does **not** write `~/.codex`, does **not** change other repositories, and does **not** apply to every thread on your machine. It only mutates the target project folder you pass as `--project`. Every repository, worktree, or project that should use CheapGPT needs its own install into **that folder's** `AGENTS.md` (and that folder's `.codex/` hooks). If you start a new repo tomorrow, install CheapGPT there again.
 
@@ -73,22 +73,23 @@ Written into the target project:
 ```text
 AGENTS.md                         # bounded CheapGPT block appended or replaced
 .cheapgpt/state.json              # profile, hashes, hook mode
+.cheapgpt/cheapgpt.mjs            # the flow tool (cheap, cheap-100)
 .codex/config.toml                # project-local MultiAgent V2 wait backstop (+ optional AGENTS.md limit)
 .codex/hooks.json                 # CheapGPT entries merged; other hooks kept
 .codex/hooks/cheapgpt-turn.mjs    # heartbeat + compact recovery
 ```
 
-While a task runs, the root also keeps `cheapgpt/plan.md` (the board) and `temporary/` (scratch files) in the project. Both are git-excluded and deleted when the task passes.
+While a task runs, `.cheapgpt/cheapgpt.mjs` keeps its record in `cheapgpt/` (the plan, the state and log, a rendered board, call packets and replies, worktrees) and scratch files in `temporary/`. Both are git-excluded and removed when the task is done. The `ultracheap` profile does not use the tool.
 
 ## Profiles
 
 Install **exactly one**. They are mutually exclusive.
 
-| Profile | Account | Use when | Root | Dynamic (Terra) | Mechanical (Luna) | Reviewers | Planner and loop-breaker | Board budget |
-| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | `gpt-6.1-terra` medium | `gpt-6-luna` max | `gpt-6.1-sol` medium | `gpt-6.1-sol` xhigh | 20,000 |
-| `cheap-100` | ChatGPT Pro | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | `gpt-6.1-terra` max | `gpt-6-luna` max | `gpt-6.1-sol` xhigh | `gpt-6-astra` xhigh | 25,000 |
-| `ultracheap` (legacy) | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | — (root implements) | — | `gpt-6-luna` max | fresh `gpt-6.1-sol` medium replanner | 15,000 |
+| Profile | Account | Use when | Root | Dynamic builder | Mechanical builder | Reviewers | Planner and loop-breaker |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `cheap` | ChatGPT Plus | Medium-hard tasks | sol-6.1-medium (`gpt-6.1-sol` medium) | `gpt-6.1-terra` medium | `gpt-6-luna` max | `gpt-6.1-sol` medium | `gpt-6.1-sol` xhigh |
+| `cheap-100` | ChatGPT Pro | Hardest tasks | sol-6.1-xhigh (`gpt-6.1-sol` xhigh) | `gpt-6.1-terra` max | `gpt-6-luna` max | `gpt-6.1-sol` xhigh | `gpt-6-astra` xhigh |
+| `ultracheap` (legacy) | ChatGPT Plus | Simple tasks | luna-6-max (`gpt-6-luna` max) | — (root implements) | — | `gpt-6-luna` max | fresh `gpt-6.1-sol` medium replanner |
 
 `ultracheap` is a **legacy** profile. It keeps the previous orchestration design and is not maintained against the current flow. A new ultracheap flow will be released once good cheap models and big models at a decent price make it viable.
 
@@ -97,15 +98,15 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
 ## How a task runs (cheap, cheap-100)
 
 1. **Route.** The root picks a route and states it in one line:
-   - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, with no children and no board.
-   - FOCUSED: known mechanism.
-   - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output.
-2. **PLAN.** The planner, the strongest model in the profile (the loop-breaker model), writes the acceptance list, the mechanism and the handoffs. On a project with existing code a fresh reviewer checks the plan once; on a new project the first real run is the test.
-3. **BUILD.** Terra and Luna build the core first and run it on real input; a fresh reviewer checks it right away. Then they build the rest, and a final review checks everything after one last real run.
-4. **Tiny loops.** Each failure is fixed in a tiny loop: the root reproduces it, briefs one fix with a test that fails before the fix, and checks it on a real run. No reviewer inside the loop.
-5. **Full step back.** A fix that fails, a stall or a bad core goes to a fresh loop-breaker. It diagnoses from the big picture and makes one fix: a corrected brief, its own tiny loop, or a rewritten plan.
-6. **Back to you.** If that fix fails too, the task stops **BLOCKED** with EXPLORE/RESEARCH options. Worst case: one full step back per criterion, then you decide.
-7. **Issue report.** After a task that needed a full step back finally passes, the root drafts a project-neutral issue for this repo and files it only if you say yes.
+   - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, without the tool, children or board.
+   - FOCUSED: known mechanism; the root writes the plan.
+   - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output; the planner (the loop-breaker model) writes the plan.
+2. **Adopt and preflight.** On an existing project the root first records a real baseline run. Every role's model is confirmed from the harness's own record, and a reviewer call is checked to leave the repository unchanged.
+3. **PLAN.** Goals in your words, single-property criteria (CORE or NON-CORE) each with the real run that decides it and its boundary case, plus Backlog and Drop. Criteria only you can judge stay on the list for you. The tool refuses a plan that does not trace every criterion to a goal. On existing code a fresh reviewer checks the plan once.
+4. **BUILD in tiny loops.** Every build is a tiny loop: a step back, the dynamic and mechanical builders in parallel in their own worktrees, a merge, a real run and a fresh read-only review. The tool computes the outcome (PASS, ADVANCED, STALLED, REGRESSION, BLOCKED) and keeps BASE, the build with the most criteria passing.
+5. **Step backs that look at the whole.** Every step back reads all the evidence, names the class of failure and its root cause, considers removal first and checks the evidence shows the real property. The root takes it in a few lines; repeated failures move it to a fresh loop-breaker (a few paragraphs, then it builds alone); repeated failures there move it to a re-plan with you, which you approve before anything is built.
+6. **Gates.** A core gate and a release gate each run the product end to end on the exact commit a fresh reviewer then judges. The acceptance list freezes when the core gate passes.
+7. **Delivery and issue report.** You get the split acceptance table, the criteria left to you with what to try, and the gated commit. After a task that needed a full step back or a re-plan, the root may draft a universal, project-neutral issue for this repo, filed only if you say yes.
 
 ## Install / update / doctor / uninstall
 
@@ -149,7 +150,7 @@ If you hand-edit the managed block, `doctor` fails and `update`/`uninstall` refu
 
 - `main`: this Codex edition.
 - `claude-edition`: the same flow for Claude Code (CLAUDE.md, native subagents).
-- `exp`: experimental, with a Claude Code root and Terra/Luna running as Codex CLI sessions.
+- `exp`: experimental, with a Claude Code root and the dynamic and mechanical builders running as Codex CLI sessions.
 
 ## Using cheapGPT builders with cLoop
 
@@ -166,7 +167,7 @@ This branch pairs with cLoop's `codex` branch. If cLoop is already installed in 
 ## Tests
 
 ```bash
-node --test test/installer.test.mjs
+node --test test/installer.test.mjs test/cheapgpt.test.mjs
 ```
 
 ## Layout
@@ -178,6 +179,8 @@ profiles/catalog.json    profile metadata + heartbeat turn reminder
 profiles/roles.json      published roles table for cLoop (generated by tools/roles.mjs)
 cloop-guard.mjs          stops install/update when cLoop is present
 tools/roles.mjs          roles.json generator
+cheapgpt.mjs             the flow tool, installed into each project as .cheapgpt/cheapgpt.mjs
+test/cheapgpt.test.mjs   every guard of the flow tool, seen refusing and passing
 hooks/cheapgpt-turn.mjs  copied into each target project's .codex/hooks/
 test/installer.test.mjs
 ```

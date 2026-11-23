@@ -140,7 +140,7 @@ test("update replaces only CheapGPT-owned content and can switch profiles", asyn
     const agents = await readFile(path.join(dir, "AGENTS.md"), "utf8");
     assert.match(agents, /Keep me\./);
     assert.match(agents, /gpt-6\.1-sol at medium effort/);
-    assert.match(agents, /mechanical implementer/);
+    assert.match(agents, /mechanical builder/);
     assert.doesNotMatch(agents, /roughly 5000 tokens/);
     assert.equal(countMarkers(agents).start, 1);
     const state = JSON.parse(await readFile(path.join(dir, ".cheapgpt", "state.json"), "utf8"));
@@ -412,7 +412,7 @@ test("profiles keep their required structure and no blocking root-identity gate"
   for (const need of [/CavePrompt/, /UNRESOLVED/, /Preferred-root guidance:/, /FIX_NO_PLAN_CHANGES/, /RAPID/, /roughly 15000 tokens/]) assert.match(legacy, need);
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/## LAWS/, /## NOISE_VETO/, /## ROUTES/, /## FLOW/, /## BUILD MECHANICS/, /TINY LOOP/, /OUTCOMES/, /FULL STEP BACK/, /## SIGNALS/, /## ROLES AND INVOCATION/, /## BOARD AND FILES/]) assert.match(text, need);
+    for (const need of [/## FLOW/, /END_FLOW/, /## MECHANICS/, /END_MECHANICS/, /## LAWS/, /## NOISE_VETO/, /## SIGNALS/, /\.cheapgpt\/cheapgpt\.mjs/, /The step back/, /native `spawn_agent`/]) assert.match(text, need);
     assert.match(text, new RegExp(`^PROFILE: ${id}\\n`));
   }
   for (const id of ["ultracheap", "cheap", "cheap-100"]) {
@@ -685,5 +685,28 @@ test("install and update stop before writing when cLoop is installed", async () 
     await assert.rejects(cli(withHook, ["update"]), /cLoop is installed in this project/);
   } finally {
     for (const dir of [withState, withBlock, withHook]) await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("install copies the flow tool, doctor checks it, update refreshes it, uninstall removes it", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "cheap"]);
+    const tool = path.join(dir, ".cheapgpt", "cheapgpt.mjs");
+    const source = await readFile(path.join(ROOT, "cheapgpt.mjs"), "utf8");
+    assert.equal(await readFile(tool, "utf8"), source);
+    assert.equal((await cli(dir, ["doctor"])).ok, true);
+    await writeFile(tool, "// stale\n");
+    const stale = await cli(dir, ["doctor"]);
+    assert.ok(stale.warnings.some((w) => /cheapgpt\.mjs does not match current sources/.test(w)));
+    await rm(tool);
+    assert.ok((await cli(dir, ["doctor"])).issues.some((i) => /missing \.cheapgpt\/cheapgpt\.mjs/.test(i)));
+    await cli(dir, ["update"]);
+    assert.equal(await readFile(tool, "utf8"), source);
+    await cli(dir, ["uninstall"]);
+    assert.equal(existsSync(tool), false);
+    assert.equal(existsSync(path.join(dir, ".cheapgpt")), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

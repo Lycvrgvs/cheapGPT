@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "cheapGPT",
-  "version": "1.8.4",
+  "version": "1.9.0",
   "edition": "main",
   "harness": "codex",
   "profiles": {
@@ -13,17 +13,17 @@
         "runAs": "this session"
       },
       {
-        "role": "Terra (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "gpt-6.1-terra",
         "effort": "medium",
-        "runAs": "persistent child, inherits conversation",
+        "runAs": "persistent child, inherits the conversation",
         "builder": "dynamic"
       },
       {
-        "role": "Luna (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "gpt-6-luna",
         "effort": "max",
-        "runAs": "persistent child, inherits conversation",
+        "runAs": "persistent child, inherits the conversation",
         "builder": "mechanical"
       },
       {
@@ -36,7 +36,7 @@
         "role": "Planner and loop-breaker",
         "model": "gpt-6.1-sol",
         "effort": "xhigh",
-        "runAs": "planner: persistent child, inherits conversation; loop-breaker: fresh child per full step back"
+        "runAs": "planner: persistent child, inherits the conversation; loop-breaker: fresh child per full step back or re-plan"
       }
     ],
     "cheap-100": [
@@ -47,17 +47,17 @@
         "runAs": "this session"
       },
       {
-        "role": "Terra (dynamic implementer)",
+        "role": "Dynamic builder",
         "model": "gpt-6.1-terra",
         "effort": "max",
-        "runAs": "persistent child, inherits conversation",
+        "runAs": "persistent child, inherits the conversation",
         "builder": "dynamic"
       },
       {
-        "role": "Luna (mechanical implementer)",
+        "role": "Mechanical builder",
         "model": "gpt-6-luna",
         "effort": "max",
-        "runAs": "persistent child, inherits conversation",
+        "runAs": "persistent child, inherits the conversation",
         "builder": "mechanical"
       },
       {
@@ -70,7 +70,7 @@
         "role": "Planner and loop-breaker",
         "model": "gpt-6-astra",
         "effort": "xhigh",
-        "runAs": "planner: persistent child, inherits conversation; loop-breaker: fresh child per full step back"
+        "runAs": "planner: persistent child, inherits the conversation; loop-breaker: fresh child per full step back or re-plan"
       }
     ]
   }
