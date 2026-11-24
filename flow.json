@@ -1,0 +1,62 @@
+{
+  "version": "1.10.0",
+  "start": { "new": "PLAN", "existing": "ADOPT" },
+  "states": {
+    "ADOPT": { "next": ["PLAN"], "exit": ["baselineRun", "adoptRecord"] },
+    "PLAN": { "next": ["LOOP"], "exit": ["planValid", "planFrozen", "planReviewed"] },
+    "LOOP": { "next": ["LOOP", "GATE", "STOPPED"], "exit": ["planUnchanged", "reviewed"], "to": { "GATE": ["stageEstablished"], "STOPPED": ["userStops"] } },
+    "GATE": { "next": ["LOOP", "GATE", "ACCEPT"], "exit": ["planUnchanged", "reviewed", "gateRoute"] },
+    "ACCEPT": { "next": ["DONE", "LOOP"], "exit": ["userAnswer"], "to": { "DONE": ["finalReport", "gatedHead"] } },
+    "DONE": { "next": [], "terminal": true },
+    "STOPPED": { "next": [], "terminal": true }
+  },
+  "commands": {
+    "adopt": ["ADOPT"],
+    "freeze": ["PLAN", "LOOP"],
+    "planreview": ["PLAN"],
+    "stepback": ["LOOP"],
+    "replan": ["LOOP"],
+    "approve": ["LOOP"],
+    "merge": ["LOOP"],
+    "run": ["ADOPT", "LOOP", "GATE"],
+    "run --before": ["LOOP"],
+    "run --e2e": ["GATE"],
+    "call reviewer": ["PLAN", "LOOP", "GATE"],
+    "call builder": ["LOOP"],
+    "review": ["LOOP", "GATE"],
+    "prune": ["GATE"],
+    "blocked": ["PLAN", "LOOP", "GATE"],
+    "answer": ["ACCEPT"],
+    "report --final": ["ACCEPT"],
+    "clean": ["DONE", "STOPPED"]
+  },
+  "levels": ["tiny", "full", "replan"],
+  "ladder": {
+    "tiny": { "ADVANCED": [3, "full"], "STALLED": [2, "full"], "REGRESSION": [2, "full"] },
+    "full": { "ADVANCED": [1, "tiny"], "STALLED": [2, "replan"], "REGRESSION": [2, "replan"] },
+    "replan": { "ADVANCED": [1, "tiny"], "STALLED": [1, "replan"], "REGRESSION": [1, "replan"] },
+    "pass": "tiny",
+    "blocked": "replan",
+    "firstCoreStalled": "replan"
+  },
+  "cards": [
+    { "card": "adopt", "state": "ADOPT", "role": "root" },
+    { "card": "plan", "state": "PLAN", "role": "root" },
+    { "card": "planner", "state": "PLAN", "role": "planner" },
+    { "card": "plan-review", "state": "PLAN", "role": "reviewer" },
+    { "card": "loop-tiny", "state": "LOOP", "level": "tiny", "role": "root" },
+    { "card": "loop-full", "state": "LOOP", "level": "full", "role": "root" },
+    { "card": "loop-replan", "state": "LOOP", "level": "replan", "role": "root" },
+    { "card": "step-back", "state": "LOOP", "role": "root" },
+    { "card": "merge", "state": "LOOP", "level": "tiny", "role": "root" },
+    { "card": "dynamic", "state": "LOOP", "role": "dynamic" },
+    { "card": "mechanical", "state": "LOOP", "role": "mechanical" },
+    { "card": "breaker", "state": "LOOP", "role": "breaker" },
+    { "card": "review", "state": "LOOP", "role": "reviewer" },
+    { "card": "review", "state": "GATE", "role": "reviewer" },
+    { "card": "gate", "state": "GATE", "role": "root" },
+    { "card": "accept", "state": "ACCEPT", "role": "root" },
+    { "card": "done", "state": "DONE", "role": "root" },
+    { "card": "stopped", "state": "STOPPED", "role": "root" }
+  ]
+}
