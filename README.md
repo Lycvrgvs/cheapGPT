@@ -1,6 +1,6 @@
 # CheapGPT — Claude Code edition
 
-CheapGPT installs a **project-local** Claude Code orchestration policy into a repository's root `CLAUDE.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the Opus root orchestrates, integrates and verifies without writing code. A dynamic builder (Sonnet) takes every task that needs judgment, and a mechanical builder (Haiku) takes every task the plan fully determines. Every build is a tiny loop: a step back, the builders in parallel, a merge, a real run and a fresh review. A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. From 1.9.0 a small tool, `.cheapgpt/cheapgpt.mjs`, enforces the flow: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code, and the prompt keeps only judgment. This branch is the Claude Code edition; `main` is the Codex edition.
+CheapGPT installs a **project-local** Claude Code orchestration policy into a repository's root `CLAUDE.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the Opus root orchestrates, integrates and verifies without writing code. A dynamic builder (Sonnet) takes every task that needs judgment, and a mechanical builder (Haiku) takes every task the plan fully determines. Every build is a tiny loop: a step back, the builders in parallel, a merge, a real run and a fresh review. A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. An engine, `.cheapgpt/cheapgpt.mjs`, runs the flow defined in `.cheapgpt/flow.json`: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code; the detailed instructions for each state and each sub-agent are small cards in `.cheapgpt/cards/`; the prompt keeps the big picture and the judgment. This branch is the Claude Code edition; `main` is the Codex edition.
 
 It is **not** a global install. It never writes `~/.claude` and only mutates the target project folder you pass as `--project`. Every repository that should use CheapGPT needs its own install. Do not copy-paste profile text by hand; always run `install.mjs` so markers, hashes, and uninstall keep working.
 
@@ -24,7 +24,9 @@ After install or update, open the project in Claude Code, accept the workspace t
 ```text
 CLAUDE.md                          # bounded CheapGPT block appended or replaced
 .cheapgpt/state.json               # profile, hashes, hook mode
-.cheapgpt/cheapgpt.mjs             # the flow tool
+.cheapgpt/cheapgpt.mjs             # the engine
+.cheapgpt/flow.json                # its flow: states, guards, ladder, card bindings
+.cheapgpt/cards/                   # its cards: one per state, level or sub-agent role
 .claude/settings.json              # CheapGPT hook entries merged into "hooks"; other keys kept
 .claude/hooks/cheapgpt-turn.mjs    # heartbeat (UserPromptSubmit) + short compact reminder (SessionStart: compact)
 ```
@@ -50,12 +52,42 @@ The flow is the same as on `main`:
    - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, without the tool, children or board.
    - FOCUSED: known mechanism; the root writes the plan.
    - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output; the planner (the loop-breaker model) writes the plan.
-2. **Adopt and preflight.** On an existing project the root first records a real baseline run. Every role's model is confirmed from the harness's own record, and a reviewer call is checked to leave the repository unchanged.
+2. **Adopt.** On an existing project the root first records a real baseline run. Each role's model is reported as requested unless the harness's own record shows it, and every review is checked to leave the repository unchanged.
 3. **PLAN.** Goals in your words, single-property criteria (CORE or NON-CORE) each with the real run that decides it and its boundary case, plus Backlog and Drop. Criteria only you can judge stay on the list for you. The tool refuses a plan that does not trace every criterion to a goal. On existing code a fresh reviewer checks the plan once.
 4. **BUILD in tiny loops.** Every build is a tiny loop: a step back, the dynamic and mechanical builders in parallel in their own worktrees, a merge, a real run and a fresh read-only review. The tool computes the outcome (PASS, ADVANCED, STALLED, REGRESSION, BLOCKED) and keeps BASE, the build with the most criteria passing.
 5. **Step backs that look at the whole.** Every step back reads all the evidence, names the class of failure and its root cause, considers removal first and checks the evidence shows the real property. The root takes it in a few lines; repeated failures move it to a fresh loop-breaker (a few paragraphs, then it builds alone); repeated failures there move it to a re-plan with you, which you approve before anything is built.
 6. **Gates.** A core gate and a release gate each run the product end to end on the exact commit a fresh reviewer then judges. The acceptance list freezes when the core gate passes.
 7. **Delivery and issue report.** You get the split acceptance table, the criteria left to you with what to try, and the gated commit. After a task that needed a full step back or a re-plan, the root may draft a universal, project-neutral issue for this repo, filed only if you say yes.
+
+## The flow
+
+The engine's states and its loop levels, generated from `flow.json`. The profile's CARDS index says which card each state and each sub-agent loads.
+
+<!-- flow:start (generated from flow.json by tools/flow-diagram.mjs; do not edit) -->
+```mermaid
+flowchart LR
+  ADOPT --> PLAN
+  PLAN --> LOOP
+  LOOP --> LOOP
+  LOOP --> GATE
+  LOOP --> STOPPED
+  GATE --> LOOP
+  GATE --> GATE
+  GATE --> ACCEPT
+  ACCEPT --> DONE
+  ACCEPT --> LOOP
+  subgraph ladder [loop levels]
+    direction LR
+    tiny -->|3rd ADVANCED, 2nd STALLED, 2nd REGRESSION| full
+    full -->|ADVANCED| tiny
+    full -->|2nd STALLED, 2nd REGRESSION| replan
+    replan -->|ADVANCED| tiny
+    tiny -->|first core loop STALLED| replan
+    full -->|PASS| tiny
+    replan -->|PASS| tiny
+  end
+```
+<!-- flow:end -->
 
 ## Using cheapGPT builders with cLoop
 
@@ -72,7 +104,7 @@ This branch pairs with cLoop's `claude` branch. If cLoop is already installed in
 ## Tests
 
 ```bash
-node --test test/installer.test.mjs test/cheapgpt.test.mjs
+node --test test/installer.test.mjs test/cheapgpt.test.mjs test/repo.test.mjs
 ```
 
 ## Layout
@@ -84,8 +116,12 @@ profiles/catalog.json    profile metadata and turn reminders
 profiles/roles.json      published roles table for cLoop (generated by tools/roles.mjs)
 cloop-guard.mjs          stops install/update when cLoop is present
 tools/roles.mjs          roles.json generator
-cheapgpt.mjs             the flow tool, installed into each project as .cheapgpt/cheapgpt.mjs
-test/cheapgpt.test.mjs   every guard of the flow tool, seen refusing and passing
+cheapgpt.mjs             the engine, installed into each project as .cheapgpt/cheapgpt.mjs
+flow.json                the flow as data: states, transitions, guards, ladder, card bindings
+cards/                   the cards: one per state, level or sub-agent role
+tools/flow-diagram.mjs   the README flow diagram, generated from flow.json
+test/cheapgpt.test.mjs   every guard of the engine, seen refusing and passing
+test/repo.test.mjs       flow.json, cards/ and the README diagram agree
 hooks/cheapgpt-turn.mjs  copied into each target project's .claude/hooks/
 test/installer.test.mjs
 ```

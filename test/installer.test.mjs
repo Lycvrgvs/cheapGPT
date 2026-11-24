@@ -405,7 +405,7 @@ test("mergeCheapgptHooks refuses malformed hooks.json", () => {
 test("claude profiles keep their structure and use only Claude Code mechanics", async () => {
   for (const id of ["cheap", "cheap-100"]) {
     const text = await readFile(path.join(ROOT, "profiles", `${id}.md`), "utf8");
-    for (const need of [/## FLOW/, /END_FLOW/, /## MECHANICS/, /END_MECHANICS/, /## LAWS/, /## NOISE_VETO/, /## SIGNALS/, /\.cheapgpt\/cheapgpt\.mjs/, /The step back/, /native `Agent` tool/]) assert.match(text, need);
+    for (const need of [/## FLOW/, /END_FLOW/, /## MECHANICS/, /END_MECHANICS/, /## LAWS/, /## NOISE_VETO/, /## SIGNALS/, /\.cheapgpt\/cheapgpt\.mjs/, /### CARDS/, /native `Agent` tool/]) assert.match(text, need);
     for (const bad of [/spawn_agent/, /fork_turns/, /wait_agent/, /gpt-6\.1-sol/, /Astra/, /AGENTS\.md/]) assert.doesNotMatch(text, bad);
   }
 });
@@ -527,6 +527,30 @@ test("install copies the flow tool, doctor checks it, update refreshes it, unins
     assert.equal(await readFile(tool, "utf8"), source);
     await cli(dir, ["uninstall"]);
     assert.equal(existsSync(tool), false);
+    assert.equal(existsSync(path.join(dir, ".cheapgpt")), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("install copies the engine's flow and cards, doctor checks them, update repairs them, uninstall removes them", async () => {
+  const dir = await tempDir();
+  try {
+    await cli(dir, ["install", "--profile", "cheap"]);
+    const flow = path.join(dir, ".cheapgpt", "flow.json"), cards = path.join(dir, ".cheapgpt", "cards");
+    assert.equal(await readFile(flow, "utf8"), await readFile(path.join(ROOT, "flow.json"), "utf8"));
+    assert.equal(await readFile(path.join(cards, "review.md"), "utf8"), await readFile(path.join(ROOT, "cards", "review.md"), "utf8"));
+    assert.equal((await cli(dir, ["doctor"])).ok, true);
+    await writeFile(path.join(cards, "stale.md"), "old card\n");
+    await rm(path.join(cards, "plan.md"));
+    const doc = await cli(dir, ["doctor"]);
+    assert.ok(doc.issues.some((i) => /missing \.cheapgpt\/cards\/plan\.md/.test(i)));
+    assert.ok(doc.warnings.some((w) => /\.cheapgpt\/cards\/stale\.md is not in current sources/.test(w)));
+    await cli(dir, ["update"]);
+    assert.equal(existsSync(path.join(cards, "plan.md")), true);
+    assert.equal(existsSync(path.join(cards, "stale.md")), false);
+    assert.equal((await cli(dir, ["doctor"])).ok, true);
+    await cli(dir, ["uninstall"]);
     assert.equal(existsSync(path.join(dir, ".cheapgpt")), false);
   } finally {
     await rm(dir, { recursive: true, force: true });

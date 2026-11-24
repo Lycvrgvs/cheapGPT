@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "cheapGPT",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "edition": "claude-edition",
   "harness": "claude",
   "profiles": {
