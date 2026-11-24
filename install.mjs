@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import {
   copyFile,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
@@ -15,13 +16,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cloopMessage, detectCloop } from "./cloop-guard.mjs";
 
-export const PACKAGE_VERSION = "1.9.0";
+export const PACKAGE_VERSION = "1.10.0";
 export const SCHEMA_VERSION = 1;
 export const START_MARKER = "<!-- cheapgpt:managed:start -->";
 export const END_MARKER = "<!-- cheapgpt:managed:end -->";
 export const HOOK_TAG = "cheapgpt:";
 export const HOOK_SCRIPT_NAME = "cheapgpt-turn.mjs";
-export const TOOL_NAME = "cheapgpt.mjs"; // the flow tool the cheap profiles run, installed at .cheapgpt/cheapgpt.mjs
+export const TOOL_NAME = "cheapgpt.mjs"; // the engine the cheap profiles run, installed at .cheapgpt/ with flow.json and cards/
 export const INSTRUCTION_FILE = "CLAUDE.md";
 export const HOOK_MODE = "claude";
 export const CODEX_PERMISSION = "Bash(codex exec:*)";
@@ -360,6 +361,28 @@ export function cheapgptHookCount(hooksJson) {
   };
 }
 
+async function engineFiles(root) { // the engine's files, relative to .cheapgpt/: the engine, its flow and its cards
+  const dir = path.join(root, "cards");
+  const cards = existsSync(dir) ? (await readdir(dir)).filter((f) => f.endsWith(".md")).sort().map((f) => `cards/${f}`) : [];
+  return [TOOL_NAME, "flow.json", ...cards];
+}
+
+async function engineSnapshots(paths) {
+  const names = new Set([...(await engineFiles(HERE)), ...(await engineFiles(paths.stateDir))]);
+  return Promise.all([...names].map(async (f) => snapshotFile(path.join(paths.stateDir, f), await readTextIfExists(path.join(paths.stateDir, f)))));
+}
+
+async function installEngine(paths) {
+  await rm(path.join(paths.stateDir, "cards"), { recursive: true, force: true });
+  await mkdir(path.join(paths.stateDir, "cards"), { recursive: true });
+  for (const f of await engineFiles(HERE)) await copyFile(path.join(HERE, f), path.join(paths.stateDir, f));
+}
+
+async function removeEngine(paths) {
+  for (const f of [TOOL_NAME, "flow.json"]) await rm(path.join(paths.stateDir, f), { force: true });
+  await rm(path.join(paths.stateDir, "cards"), { recursive: true, force: true });
+}
+
 function snapshotFile(filePath, contents) {
   return { filePath, existed: contents != null, contents };
 }
@@ -618,7 +641,7 @@ async function writeInstallation({
     instructionFile: INSTRUCTION_FILE,
     hookMode,
     managedBlockSha256: nextState.managedBlockSha256,
-    writes: [INSTRUCTION_FILE, ".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`],
+    writes: [INSTRUCTION_FILE, ".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`, ".cheapgpt/flow.json", ".cheapgpt/cards/"],
   };
   if (hookMode === HOOK_MODE) {
     planned.writes.push(".claude/settings.json", `.claude/hooks/${HOOK_SCRIPT_NAME}`);
@@ -633,7 +656,7 @@ async function writeInstallation({
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
-    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
+    ...(await engineSnapshots(paths)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -657,7 +680,7 @@ async function writeInstallation({
       await rm(paths.hookScript, { force: true });
     }
     await mkdir(paths.stateDir, { recursive: true });
-    await copyFile(path.join(HERE, TOOL_NAME), paths.tool);
+    await installEngine(paths);
     await maybeFail("state");
     await atomicWrite(paths.state, `${JSON.stringify(nextState, null, 2)}\n`);
   } catch (err) {
@@ -747,7 +770,7 @@ async function cmdUninstall(args) {
   }
 
   const planned = {
-    removes: [".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`],
+    removes: [".cheapgpt/state.json", `.cheapgpt/${TOOL_NAME}`, ".cheapgpt/flow.json", ".cheapgpt/cards/"],
     writes: [],
   };
   if (inspect.hasAgents) planned.writes.push(INSTRUCTION_FILE);
@@ -760,7 +783,7 @@ async function cmdUninstall(args) {
 
   const snapshots = [
     snapshotFile(paths.agents, inspect.agents),
-    snapshotFile(paths.tool, await readTextIfExists(paths.tool)),
+    ...(await engineSnapshots(paths)),
     snapshotFile(paths.state, inspect.hasState ? JSON.stringify(inspect.state, null, 2) + "\n" : null),
     snapshotFile(paths.hooksJson, inspect.hooksJson),
     snapshotFile(
@@ -786,7 +809,7 @@ async function cmdUninstall(args) {
       else await atomicWrite(paths.hooksJson, nextHooksJson);
     }
     await maybeFail("state");
-    await rm(paths.tool, { force: true });
+    await removeEngine(paths);
     await rm(paths.state, { force: true });
     if (existsSync(paths.stateDir)) {
       try {
@@ -853,16 +876,17 @@ export async function doctorProject(projectRoot, sourceRoot = HERE) {
   }
 
   if (state) {
-    const installedTool = await readTextIfExists(paths.tool);
-    if (installedTool == null) issues.push(`missing .cheapgpt/${TOOL_NAME}`);
-    else {
+    const expected = await engineFiles(sourceRoot);
+    for (const f of expected) {
+      const installed = await readTextIfExists(path.join(paths.stateDir, f));
+      if (installed == null) { issues.push(`missing .cheapgpt/${f}`); continue; }
       try {
-        const expectedTool = await readFile(path.join(sourceRoot, TOOL_NAME), "utf8");
-        if (sha256(installedTool) !== sha256(expectedTool)) warnings.push(`installed .cheapgpt/${TOOL_NAME} does not match current sources; run update`);
+        if (sha256(installed) !== sha256(await readFile(path.join(sourceRoot, f), "utf8"))) warnings.push(`installed .cheapgpt/${f} does not match current sources; run update`);
       } catch {
-        warnings.push(`could not compare .cheapgpt/${TOOL_NAME} to current sources`);
+        warnings.push(`could not compare .cheapgpt/${f} to current sources`);
       }
     }
+    for (const f of await engineFiles(paths.stateDir)) if (!expected.includes(f)) warnings.push(`.cheapgpt/${f} is not in current sources; run update`);
   }
 
   const hookCounts = cheapgptHookCount(inspect.hooksJson);
