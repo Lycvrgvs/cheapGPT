@@ -1,6 +1,6 @@
 # CheapGPT
 
-CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the root orchestrates, integrates and verifies without writing code. A dynamic builder (gpt-6.1-terra) takes every task that needs judgment, and a mechanical builder (gpt-6-luna) takes every task the plan fully determines. Every build is a tiny loop: a step back, the builders in parallel, a merge, a real run and a fresh review. A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. An engine, `.cheapgpt/cheapgpt.mjs`, runs the flow defined in `.cheapgpt/flow.json`: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code; the detailed instructions for each state and each sub-agent are small cards in `.cheapgpt/cards/`; the prompt keeps the big picture and the judgment.
+CheapGPT installs a **project-local** Codex orchestration policy into a repository's root `AGENTS.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the root orchestrates, integrates and verifies without writing code. A dynamic builder (gpt-6.1-terra) takes every task that needs judgment, and a mechanical builder (gpt-6-luna) takes every task the plan fully determines. Every step starts with a prevent: a step back on the whole, then the next action written whole as one block. Every build is a tiny loop: a prevent, the builders in parallel, a merge, a real run and a review (the root's on known work, a fresh reviewer's on unknown work). A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. An engine, `.cheapgpt/cheapgpt.mjs`, runs the flow defined in `.cheapgpt/flow.json`: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code; the detailed instructions for each state and each sub-agent are small cards in `.cheapgpt/cards/`; the prompt keeps the big picture and the judgment.
 
 This is **not** a global Codex install. It does **not** write `~/.codex`, does **not** change other repositories, and does **not** apply to every thread on your machine. It only mutates the target project folder you pass as `--project`. Every repository, worktree, or project that should use CheapGPT needs its own install into **that folder's** `AGENTS.md` (and that folder's `.codex/` hooks). If you start a new repo tomorrow, install CheapGPT there again.
 
@@ -103,11 +103,11 @@ Preferred root is the economical/capability configuration CheapGPT recommends. I
    - DIRECT: one obvious local edit, or a bounded operational task with a known procedure. The root does it, confirms it by the check or the operation's real output, and is done, without the tool, children or board.
    - FOCUSED: known mechanism; the root writes the plan.
    - FULL: unsettled mechanism, unfamiliar tech, costly failure, or any behavior that depends on model output; the planner (the loop-breaker model) writes the plan.
-2. **Adopt.** On an existing project the root first records a real baseline run. Each role's model is reported as requested unless the harness's own record shows it, and every review is checked to leave the repository unchanged.
-3. **PLAN.** Goals in your words, single-property criteria (CORE or NON-CORE) each with the real run that decides it and its boundary case, plus Backlog and Drop. Criteria only you can judge stay on the list for you. The tool refuses a plan that does not trace every criterion to a goal. On existing code a fresh reviewer checks the plan once.
-4. **BUILD in tiny loops.** Every build is a tiny loop: a step back, the dynamic and mechanical builders in parallel in their own worktrees, a merge, a real run and a fresh read-only review. The tool computes the outcome (PASS, ADVANCED, STALLED, REGRESSION, BLOCKED) and keeps BASE, the build with the most criteria passing.
-5. **Step backs that look at the whole.** Every step back reads all the evidence, names the class of failure and its root cause, considers removal first and checks the evidence shows the real property. The root takes it in a few lines; repeated failures move it to a fresh loop-breaker (a few paragraphs, then it builds alone); repeated failures there move it to a re-plan with you, which you approve before anything is built.
-6. **Gates.** A core gate and a release gate each run the product end to end on the exact commit a fresh reviewer then judges. The acceptance list freezes when the core gate passes.
+2. **Adopt.** On an existing project the root first steps back over the project, records a real baseline run and writes down what exists as one block. Each role's model is reported as requested unless the harness's own record shows it, and every review is checked to leave the repository unchanged.
+3. **PLAN.** Goals in your words, single-property criteria (CORE or NON-CORE) each with the real run that decides it and its boundary case, plus Backlog and Drop. Criteria only you can judge stay on the list for you. Goals, design and acceptance are drafted together as one block, then split into the acceptance list and the builders' handoffs. The tool refuses a plan that does not trace every criterion to a goal. On existing code a fresh reviewer checks the plan once. The plan freezes when the build starts; after that only a re-plan with you changes it.
+4. **BUILD in tiny loops.** Core and non-core criteria are built in the same tiny loops until every one is established. Each loop: a prevent (a short step back, then the loop's work sketched whole as one block, which the builders receive), the dynamic and mechanical builders in parallel in their own worktrees, a merge, a real run and a review: on FOCUSED the root checks the run itself; on FULL a fresh read-only reviewer judges it. The tool computes the outcome (PASS, ADVANCED, STALLED, REGRESSION, BLOCKED) and keeps BASE, the build with the most criteria passing.
+5. **Step backs that look at the whole.** Every step back reads all the evidence, names the class of failure and its root cause, considers removal first and checks the evidence shows the real property. The root takes it in a few lines; repeated failures move it to a fresh loop-breaker (a page, from scratch, then it builds alone); repeated failures there move it to a re-plan with you: you comment first, then approve or reject the new plan before anything is built.
+6. **Release gate.** One gate runs the product end to end on the exact commit a fresh reviewer then judges against every criterion, core and non-core. Criteria that fail go back to tiny loops.
 7. **Delivery and issue report.** You get the split acceptance table, the criteria left to you with what to try, and the gated commit. After a task that needed a full step back or a re-plan, the root may draft a universal, project-neutral issue for this repo, filed only if you say yes.
 
 ## Install / update / doctor / uninstall
@@ -167,7 +167,6 @@ flowchart LR
   LOOP --> GATE
   LOOP --> STOPPED
   GATE --> LOOP
-  GATE --> GATE
   GATE --> ACCEPT
   ACCEPT --> DONE
   ACCEPT --> LOOP
@@ -177,7 +176,6 @@ flowchart LR
     full -->|ADVANCED| tiny
     full -->|2nd STALLED, 2nd REGRESSION| replan
     replan -->|ADVANCED| tiny
-    tiny -->|first core loop STALLED| replan
     full -->|PASS| tiny
     replan -->|PASS| tiny
   end

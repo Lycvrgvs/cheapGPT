@@ -21,7 +21,6 @@ function diagram(flow) {
     const [n, to] = flow.ladder[from][o]; if (to === from) continue;
     (edges[`${from}|${to}`] ||= []).push(nth(n) + o);
   }
-  edges[`tiny|${flow.ladder.firstCoreStalled}`] = [...(edges[`tiny|${flow.ladder.firstCoreStalled}`] || []), 'first core loop STALLED'];
   for (const [k, labels] of Object.entries(edges)) { const [from, to] = k.split('|'); lines.push(`    ${from} -->|${labels.join(', ')}| ${to}`); }
   lines.push(`    full -->|PASS| ${flow.ladder.pass}`, `    replan -->|PASS| ${flow.ladder.pass}`, '  end', '```');
   return lines.join('\n');
