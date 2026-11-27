@@ -1,3 +1,12 @@
+> **This branch is frozen at 1.10.3.** Every cheapGPT edition now lives on `main`. This branch was the `exp` edition; install it from `main` with `--edition exp`:
+>
+> ```bash
+> git clone https://github.com/Lycvrgvs/cheapGPT
+> node cheapGPT/install.mjs install --project . --edition exp --profile cheap
+> ```
+>
+> A project installed from this branch updates from `main` (`node cheapGPT/install.mjs update --project .`) and keeps its edition. The rest of this page describes 1.10.3.
+
 # CheapGPT — Claude Code edition
 
 CheapGPT installs a **project-local** Claude Code orchestration policy into a repository's root `CLAUDE.md`. The goal is the fewest expensive tokens per correct change. The strongest model in the profile writes the plan; the Opus root orchestrates, integrates and verifies without writing code. A dynamic builder (gpt-6.1-terra, a Codex CLI session) takes every task that needs judgment, and a mechanical builder (gpt-6-luna, a Codex CLI session) takes every task the plan fully determines. Every step starts with a prevent: a step back on the whole, then the next action written whole as one block. Every build is a tiny loop: a prevent, the builders in parallel, a merge, a real run and a review (the root's on known work, a fresh reviewer's on unknown work). A loop that keeps failing escalates from the root to a fresh loop-breaker, then to a re-plan that you approve. An engine, `.cheapgpt/cheapgpt.mjs`, runs the flow defined in `.cheapgpt/flow.json`: what can be computed (states, outcomes, the escalation ladder, the evidence each step owes) is checked by code; the detailed instructions for each state and each sub-agent are small cards in `.cheapgpt/cards/`; the prompt keeps the big picture and the judgment. This branch is the Claude Code edition; `main` is the Codex edition.
