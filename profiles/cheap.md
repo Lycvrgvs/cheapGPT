@@ -13,7 +13,7 @@ Route, at task start, in one line: `CHEAPGPT: <DIRECT|FOCUSED|FULL> — <reason>
 
 (ADOPT) → PLAN → BUILD: tiny loops until every item is established → release gate → ACCEPT (the user accepts, or gives feedback → re-plan)
 
-Adoption, the plan and every loop start with a PREVENT: a step back on the whole, then the one-block, the next action written whole on the board. Every build is a tiny loop: PREVENT, the builders, a merge, a real run of the affected path and a review. The engine computes the outcome, which sets the next level. One release gate runs the product end to end on the commit it certifies, and a fresh reviewer judges every item.
+Adoption, the plan, every loop and the release gate start with a PREVENT: a step back on the whole, then the one-block, the next action written whole on the board. The engine refuses a state's work commands until both are recorded. Every build is a tiny loop: PREVENT, the builders, a merge, a real run of the affected path and a review. The engine computes the outcome, which sets the next level. One release gate runs the product end to end on the commit it certifies, and a fresh reviewer judges every item.
 
 | Outcome | Meaning | BASE |
 |---|---|---|
@@ -43,7 +43,7 @@ The tool. At every step: `node .cheapgpt/cheapgpt.mjs status` (the state, its ca
 - `adopt`: understanding an existing project before planning (ADOPT).
 - `plan`: the plan's format and rules (PLAN). `planner`: the planner's brief (its assignment, on FULL). `plan-review`: the plan reviewer's brief (its packet, on an adopted project).
 - `loop-tiny`, `loop-full`, `loop-replan`: the steps of a loop at each level (LOOP).
-- `step-back`, `one-block`: the two halves of every PREVENT (adoption, the plan, every loop; the loop-breaker's packet).
+- `step-back`, `one-block`: the two halves of every PREVENT (adoption, the plan, every loop, the release gate; the loop-breaker's packet).
 - `merge`: merging the builders' work (loops at level tiny).
 - `dynamic`, `mechanical`, `breaker`: each builder's and the loop-breaker's brief (their packets).
 - `mini-review`: your review of a FOCUSED loop. `review`: the fresh reviewer's brief and return format (its packet: FULL loops, the release gate).

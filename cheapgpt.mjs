@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '1.10.2';
+const VERSION = '1.10.3';
 const ROOT = process.cwd();
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(ROOT, 'cheapgpt');
@@ -56,11 +56,13 @@ function load() {
   if (!fs.existsSync(F.state)) die(`no task here: ${CMD} init <FOCUSED|FULL> <slug> "<reason>" (DIRECT uses no tool)`);
   const s = JSON.parse(fs.readFileSync(F.state, 'utf8'));
   if ('stage' in s) { // a task started on 1.10.0 (a core and a non-core stage) continues on one features stage
-    const from = s.version;
     if (s.adopt) s.notes.push('adoption record (before 1.10.2): ' + s.adopt);
     for (const k of ['stage', 'hard', 'coreLoops', 'adopt']) delete s[k];
-    s.blocks = []; s.entry.block = null; s.version = VERSION;
-    save(s, { ev: 'migrate', from, to: VERSION });
+    s.blocks = []; s.entry.block = null;
+  }
+  if (s.version !== VERSION) { // saved by an earlier version mid-state: the prevent is owed from the next state entry
+    const from = s.version; if (!(s.entry.prevent && s.entry.block)) s.entry.legacy = true;
+    s.version = VERSION; save(s, { ev: 'migrate', from, to: VERSION });
   }
   return s;
 }
@@ -139,13 +141,13 @@ function plan() {
 const reviewable = () => plan().crit.filter((c) => !c.user).map((c) => c.id);
 const openItems = (s) => reviewable().filter((id) => !s.est.includes(id));
 const targets = (s) => (s.entry.prevent && s.entry.prevent.targets && s.entry.prevent.targets.length && s.entry.prevent.targets) || (s.entry.replan && s.entry.replan.targets) || s.targets;
-const stepbackHint = (s) => `${CMD} stepback ${s.state === 'LOOP' ? s.level + ' --targets <IDs> ' : ''}"<the whole>" (the step-back card)`;
+const stepbackHint = (s) => `${CMD} stepback ${s.state === 'LOOP' ? s.level + ' --targets <IDs> ' : ''}"<the whole>" (the step-back card${s.state === 'LOOP' && s.level !== 'tiny' ? "; the loop-breaker's, recorded by you" : ''})`;
 const reviewHint = (s) => s.state === 'LOOP' && s.route === 'FOCUSED' ? `your mini-review: cheapgpt/mini.md, then ${CMD} review mini (the mini-review card)` : `${CMD} call reviewer, then review <id>`;
 
 // ── Guards: named functions; flow.json says which apply to which transition ───────────────
 const GUARDS = {
   baselineRun: (s) => s.entry.runs.some((r) => r.kind === 'run') ? [] : [`the baseline real run on HEAD: ${CMD} run -- <command>`],
-  prevented: (s) => [...(s.entry.prevent ? [] : [`the step back: ${stepbackHint(s)}`]), ...(s.entry.block ? [] : [`the one-block: ${CMD} block "<the next action, whole>" (the one-block card)`])],
+  prevented: (s) => s.entry.legacy ? [] : [...(s.entry.prevent ? [] : [`the step back: ${stepbackHint(s)}`]), ...(s.entry.block ? [] : [`the one-block: ${CMD} block "<the next action, whole>" (the one-block card)`])],
   planValid: () => plan().errors.map((x) => 'plan: ' + x),
   planFrozen: (s) => s.frozen === plan().hash ? [] : [`freeze the plan: ${CMD} freeze`],
   planReviewed: (s) => !s.adopted ? [] : !s.planReview ? [`the plan review: ${CMD} call reviewer, then planreview <id>`] : s.planReview.verdict === 'FIX' && !(s.frozenT > s.planReview.t) ? [`apply the FIX once, then ${CMD} freeze`] : [],
@@ -173,15 +175,15 @@ function reviewReady(s) { // a loop's review judges its merged, committed candid
   const d = dirty(); if (d.length) die(`a review judges a commit; ${d.slice(0, 3).join(', ')} uncommitted: commit it first: git commit (${CMD} git commit when the repository lives in cheapgpt/git)`);
   if (!e.runs.some((r) => r.kind === 'run' && r.sha === head() && r.t > e.merged.t)) die(`run the affected path on this commit first: ${CMD} run -- <command>`);
 }
-function allowed(s, name) { // a command runs only in the states flow.json names for it
+function allowed(s, name) { // a command runs only in the states flow.json names for it, and a state's work only after its prevent
   const where = FLOWDATA.commands[name];
   if (where && !where.includes(s.state)) die(`${name} belongs to ${where.join(' or ')}; this task is in ${s.state}: ${NEXT_HINT}`);
+  if ((FLOWDATA.prevent[s.state] || []).includes(name)) { const p = GUARDS.prevented(s); if (p.length) die(`PREVENT first: ${name} in ${s.state} waits for ${p.join('; ')}`); }
 }
 function loopGuard(s, what) { // the evidence a loop step owes before `what`
   const e = s.entry;
   const pu = GUARDS.planUnchanged(s); if (pu.length) die(pu[0]);
   if (s.level === 'replan' && !e.replan) die(`a re-plan starts with the user's words: ${CMD} replan "<their comment>"`);
-  if (s.level === 'tiny' || what === 'merge') { const p = GUARDS.prevented(s); if (p.length) die(`PREVENT first (${s.level === 'tiny' ? 'yours' : "the loop-breaker's, recorded by you"}): ${p.join('; ')}`); }
   if (what !== 'merge') return;
   if (s.level === 'replan' && !e.approved) die(`the user approves the new plan before anything is built: ${CMD} approve "<their words>"`);
   const failed = targets(s).filter((id) => s.failed.includes(id));
@@ -354,7 +356,6 @@ const C = {
     if (P.errors.length) die('fix the plan first:\n- ' + P.errors.join('\n- '));
     const after = s.state !== 'PLAN';
     if (after && !(s.level === 'replan' && s.entry.replan)) die(`the acceptance list is frozen since the build started: only a re-plan with the user changes it (${CMD} blocked "<why>", then replan)`);
-    const p = GUARDS.prevented(s); if (p.length) die(`the plan is the one-block of a prevent: ${p.join('; ')}; then freeze`);
     if (s.frozenSet && P.hash !== s.frozen) {
       const removed = s.frozenSet.ids.filter((id) => !P.crit.some((c) => c.id === id)), goals = P.goals.map((g) => g.raw).join('\n') !== s.frozenSet.goals;
       const why = [...(after ? ['the build has started'] : []), ...(removed.length ? [`removed: ${removed.join(', ')}`] : []), ...(goals ? ['the goals changed'] : [])];
@@ -374,7 +375,7 @@ const C = {
     const m = fs.readFileSync(out, 'utf8').trim().match(/^(PASS|FIX)\b/); if (!m) die(`the reply must open with PASS or FIX (the plan-review card): ${CMD} redispatch ${id}`);
     s.snap = null; s.planReview = { verdict: m[1], t: now(), id }; save(s, { ev: 'planreview', verdict: m[1] }); console.log(`plan review: ${m[1]}${m[1] === 'FIX' ? ' — apply it once, then freeze' : ''}`);
   },
-  stepback() { // the first half of a prevent: in ADOPT and PLAN on the whole, in a loop on its targets at the loop's level
+  stepback() { // the first half of a prevent: in ADOPT, PLAN and GATE on the whole, in a loop on its targets at the loop's level
     const s = load(); allowed(s, 'stepback');
     const loop = s.state === 'LOOP', given = FLOWDATA.levels.includes(a[0]) ? a.shift() : null, tg = (opt('--targets') || '').split(',').filter(Boolean);
     if (loop && given !== s.level) die(`this loop is at level ${s.level}: ${CMD} stepback ${s.level} --targets <IDs> "..."`);
@@ -413,7 +414,6 @@ const C = {
   approve() {
     const s = load(); allowed(s, 'approve');
     if (s.level !== 'replan' || !s.entry.replan) die(`approve follows the user's re-plan comment: ${CMD} replan "<their comment>"`);
-    const p = GUARDS.prevented(s); if (p.length) die(`record the loop-breaker's prevent first: ${p.join('; ')}`);
     const P = plan(); if (P.errors.length || s.frozen !== P.hash) die(`freeze the new plan first (${CMD} freeze), show it to the user, then approve`);
     const tips = Object.fromEntries(s.entry.calls.filter((c) => s.calls[c].role === 'breaker').map((c) => [c, git(['rev-parse', 'cg/' + c]).out.trim()]));
     s.entry.approved = { t: now(), text: text("the user's words"), tips }; s.count = ZERO();
@@ -422,7 +422,8 @@ const C = {
   call() {
     const s = load(), role = a[0], e = s.entry;
     if (!ROLES.includes(role)) die(`call ${ROLES.join('|')}`);
-    allowed(s, role === 'reviewer' ? 'call reviewer' : 'call builder');
+    if (s.state === 'LOOP' && role !== 'reviewer' && (role === 'breaker' ? s.level === 'tiny' : s.level !== 'tiny')) die(role === 'breaker' ? `at level tiny the builders build: ${CMD} call dynamic | call mechanical` : `at level ${s.level} the loop-breaker builds alone: ${CMD} call breaker`);
+    allowed(s, role === 'reviewer' ? 'call reviewer' : role === 'breaker' ? 'call breaker' : 'call builder'); // the loop-breaker's call comes before its prevent: it writes it
     let commit;
     if (role === 'reviewer') {
       if (s.state === 'LOOP') {
@@ -437,7 +438,6 @@ const C = {
       }
       commit = head(); if (!s.snap) s.snap = snapshot();
     } else {
-      if (role === 'breaker' ? s.level === 'tiny' : s.level !== 'tiny') die(role === 'breaker' ? `at level tiny the builders build: ${CMD} call dynamic | call mechanical` : `at level ${s.level} the loop-breaker builds alone: ${CMD} call breaker`);
       if (role === 'breaker' && s.level === 'full' && !openItems(s).length) die(`every item is established: nothing for the loop-breaker to fix; the release gate: ${CMD} advance GATE`);
       loopGuard(s, 'call');
       if (e.merged) die(`this loop is merged: review it (${reviewHint(s)})`);
@@ -556,6 +556,7 @@ const C = {
     for (const k of states) { const seen = new Set([k]), q = [k]; let ok = false; while (q.length) { const x = q.shift(); if (FLOW[x].terminal) { ok = true; break; } for (const t of FLOW[x].next) if (!seen.has(t)) { seen.add(t); q.push(t); } } if (!ok) errs.push(k + ': cannot end'); }
     const reach = new Set(Object.values(FLOWDATA.start)), q = [...reach]; while (q.length) for (const t of FLOW[q.shift()].next) if (!reach.has(t)) { reach.add(t); q.push(t); }
     for (const k of states) if (!reach.has(k)) errs.push(k + ': unreachable');
+    for (const [k, cmds] of Object.entries(FLOWDATA.prevent || {})) for (const c of cmds) if (!FLOW[k] || !(FLOWDATA.commands[c] || []).includes(k)) errs.push(`prevent ${k}: ${c} is not a command of ${k}`);
     for (const l of FLOWDATA.levels) for (const o of ['ADVANCED', 'STALLED', 'REGRESSION']) if (!LADDER[l] || !LADDER[l][o] || !FLOWDATA.levels.includes(LADDER[l][o][1])) errs.push(`ladder ${l}/${o}: missing or unknown level`);
     for (const k of states) { const lv = k === 'LOOP' ? FLOWDATA.levels : [undefined]; for (const l of lv) if (!bound({ state: k, level: l, role: 'root' }).length) errs.push(`${k}${l ? '/' + l : ''}: no root card bound`); }
     for (const r of ROLES) for (const k of ['LOOP']) if (!bound({ state: k, level: r === 'breaker' ? 'full' : 'tiny', role: r }).length) errs.push(`${k}: no card bound for role ${r}`);
