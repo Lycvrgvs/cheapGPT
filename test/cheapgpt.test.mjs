@@ -78,7 +78,7 @@ function breaker(r, targets, met, failed, { replan = null } = {}) { // one loop-
   return r.state();
 }
 function gate(r, met, failed = []) { // the release gate on HEAD
-  r.ok('advance', 'GATE'); r.ok('prune', 'none'); r.ok('run', '--e2e', '--', 'node -e 1');
+  r.ok('advance', 'GATE'); r.prevent(); r.ok('prune', 'none'); r.ok('run', '--e2e', '--', 'node -e 1');
   const rv = r.callId(r.ok('call', 'reviewer')); r.reply(rv, verdicts(r, met, failed)); r.ok('review', rv);
   for (const i of failed) r.ok('reproduce', i, 'yes', '--', 'node -e "process.exit(1)"');
   return r.state();
@@ -89,7 +89,7 @@ test('M: the plan starts with a prevent (step back, then the one-block), traces 
   const r = repo(); r.ok('init', 'FULL', 'demo', 'a small counter');
   r.writePlan(PLAN().replace(' | boundary: -h too', '').replace('C1, C2, C3', 'C1, C2'));
   r.refuse('planValid', /plan: C3: add "\| boundary[\s\S]*C3: no goal traces/, 'LOOP');
-  r.writePlan(PLAN()); r.no(/the plan is the one-block of a prevent: the step back: node[\s\S]*the one-block/, 'freeze');
+  r.writePlan(PLAN()); r.no(/PREVENT first: freeze in PLAN waits for the step back: node[\s\S]*the one-block: node/, 'freeze');
   r.no(/the step back comes first, then the one-block/, 'block', 'x');
   r.no(/covers the whole, without targets/, 'stepback', '--targets', 'C1', 'x');
   r.ok('stepback', 'the goals: a counter; unknown: none; risk: zero'); assert.equal(r.state().stepbacks[0].size, 'full', 'a FULL plan gets the full step back');
@@ -111,9 +111,11 @@ test('M: after the pre-freeze only a re-plan with the user changes the list; a c
 test('M: an existing project is adopted with a prevent and a baseline run, and its plan is reviewed once', () => {
   const r = repo({ existing: true }); r.ok('init', 'FOCUSED', 'demo', 'extend the counter');
   assert.equal(r.state().state, 'ADOPT');
-  r.refuse(['baselineRun', 'prevented'], /baseline real run[\s\S]*the step back: node[\s\S]*the one-block: node/, 'PLAN');
-  r.ok('run', '--', 'node app.js'); r.ok('stepback', 'the whole project: one file, no tests; risk: none');
-  r.ok('block', 'what exists: app.js prints 1 on the baseline run; no existing checks to protect'); r.ok('advance', 'PLAN');
+  r.no(/PREVENT first: run in ADOPT waits for the step back: node[\s\S]*the one-block: node/, 'run', '--', 'node app.js');
+  r.ok('stepback', 'the whole project: one file, no tests; risk: none');
+  r.ok('block', 'what exists: app.js prints 1; no existing checks to protect; baseline: node app.js');
+  r.refuse('baselineRun', /the baseline real run on HEAD: node/, 'PLAN');
+  r.ok('run', '--', 'node app.js'); r.ok('advance', 'PLAN');
   r.prevent(); r.writePlan(PLAN()); r.ok('freeze');
   r.refuse('planReviewed:review', /the plan review: node/, 'LOOP');
   const rv = r.callId(r.ok('call', 'reviewer')); r.reply(rv, 'FIX: C2 boundary misses empty input'); r.ok('planreview', rv);
@@ -124,7 +126,8 @@ test('M: an existing project is adopted with a prevent and a baseline run, and i
 // ── the tiny loop ────────────────────────────────────────────────────────────────────────
 test('M: a tiny loop needs its prevent, disjoint committed builders, a merge, a run on HEAD, then a review', () => {
   const r = repo(); planned(r);
-  r.no(/PREVENT first \(yours\): the step back: node[\s\S]*the one-block/, 'call', 'dynamic');
+  r.refuse('prevented:loop', /LOOP → LOOP needs:\n- the step back: node[\s\S]*- the one-block: node/, 'LOOP'); // the exit checks the prevent again
+  r.no(/PREVENT first: call builder in LOOP waits for the step back: node[\s\S]*the one-block/, 'call', 'dynamic');
   r.no(/builders build/, 'call', 'breaker');
   r.ok('stepback', 'tiny', '--targets', 'C1,C2', 'the whole: nothing built; build add; allocation dyn+mech'); r.no(/PREVENT first[\s\S]*one-block/, 'call', 'dynamic');
   r.ok('block', 'add.js: parse, validate, sum');
@@ -184,7 +187,8 @@ test('M: every item, core and non-core, is built in loops; one release gate runs
   tiny(r, ['C3'], ['C3'], []); r.ok('advance', 'GATE');
   r.refuse('gatePassed:review', /the release gate's settled review: node/, 'ACCEPT');
   r.refuse('gateSettled:review', /the gate's review and its settled outcome: node/, 'LOOP');
-  r.ok('run', '--e2e', '--', 'node -e 1'); r.no(/records its prune first/, 'call', 'reviewer');
+  r.no(/PREVENT first: run --e2e in GATE waits for the step back: node \.cheapgpt\/cheapgpt\.mjs stepback "<the whole>"[\s\S]*the one-block/, 'run', '--e2e', '--', 'node -e 1');
+  r.prevent(); r.ok('run', '--e2e', '--', 'node -e 1'); r.no(/records its prune first/, 'call', 'reviewer');
   r.ok('prune', 'none'); r.no(/end to end on this commit first/, 'call', 'reviewer'); // the e2e run predates the prune
   r.ok('run', '--e2e', '--', 'node -e 1'); r.commit('docs.md', 'late doc'); r.no(/end to end on this commit first/, 'call', 'reviewer');
   r.ok('run', '--e2e', '--', 'node -e 1'); const rv = r.callId(r.ok('call', 'reviewer'));
@@ -230,9 +234,9 @@ test('M: tiny STALLED stays once, the 2nd → full; a dropped candidate is saved
   assert.ok(s.history[1].saved && fs.existsSync(path.join(r.d, s.history[1].saved)), 'the dropped candidate is saved'); assert.match(r.ok('git', 'rev-parse', 'HEAD'), new RegExp(s.base));
   r.ok('advance', 'LOOP'); s = tiny(r, ['C1'], [], ['C1']); assert.equal(s.history[2].outcome, 'STALLED'); assert.equal(s.level, 'full'); assert.equal(s.count.STALLED, 0);
   r.ok('advance', 'LOOP'); r.no(/loop-breaker builds alone/, 'call', 'dynamic');
-  const br = r.ok('call', 'breaker'); r.ok('run', '--before', '--', 'node -e "process.exit(1)"'); const bid = r.child(br, { 'h.js': 'h\n' });
-  r.no(/PREVENT first \(the loop-breaker's, recorded by you\)/, 'merge', bid);
-  r.prevent('full', '--targets', 'C1');
+  const br = r.ok('call', 'breaker'), bid = r.child(br, { 'h.js': 'h\n' }); // the loop-breaker's call is the one step before its prevent
+  r.no(/PREVENT first: merge in LOOP waits for the step back: node .*stepback full --targets[\s\S]*the loop-breaker's, recorded by you/, 'merge', bid);
+  r.prevent('full', '--targets', 'C1'); r.ok('run', '--before', '--', 'node -e "process.exit(1)"');
   r.ok('merge', bid); r.ok('run', '--', 'node -e 1'); rv = r.callId(r.ok('call', 'reviewer')); r.reply(rv, r.met(['C1'])); r.ok('review', rv);
   s = r.state(); assert.equal(s.history[3].outcome, 'PASS'); assert.equal(s.level, 'tiny'); assert.deepEqual(s.count, { ADVANCED: 0, STALLED: 0, REGRESSION: 0 });
 });
@@ -263,7 +267,8 @@ test('M: with every item established, the loop-breaker has nothing to fix: the r
   tiny(r, ['C1'], [], ['C1']); r.ok('advance', 'LOOP'); const s = tiny(r, ['C1'], [], ['C1']);
   assert.equal(s.history[2].outcome, 'REGRESSION'); assert.equal(s.level, 'full'); assert.deepEqual(s.est.sort(), ['C1', 'C2', 'C3'], 'BASE kept every item');
   r.ok('advance', 'LOOP'); r.no(/every item is established: nothing for the loop-breaker to fix; the release gate: node .* advance GATE/, 'call', 'breaker');
-  r.ok('advance', 'GATE');
+  r.refuse('prevented:gate', /LOOP → GATE needs:\n- the step back: node[\s\S]*- the one-block: node/, 'GATE'); // the exit checks the prevent again
+  r.prevent('full', '--targets', 'C1'); r.ok('advance', 'GATE');
 });
 
 // ── the re-plan: two decisions of the user's ─────────────────────────────────────────────
@@ -276,12 +281,12 @@ test('M: a first STALLED stays tiny; a re-plan needs the user\'s words, the loop
   r.no(/level replan: .*stepback replan/, 'stepback', 'tiny', '--targets', 'C1', 'x');
   r.ok('replan', 'keep zero valid; try integer parsing');
   const br = r.ok('call', 'breaker'); const early = r.child(br, { 'early.js': 'e\n' });
-  r.no(/record the loop-breaker's prevent first: the step back/, 'approve', 'yes');
+  r.no(/PREVENT first: approve in LOOP waits for the step back/, 'approve', 'yes');
   r.prevent('replan', '--targets', 'C1');
   r.writePlan(PLAN().replace('add(0,0) prints 0', 'add(0,0) prints 0 and add(-1,1) prints 0')); r.no(/freeze the new plan first/, 'approve', 'yes');
   r.no(/the user's \(the build has started\)/, 'freeze'); r.ok('freeze', '--user', 'integers only');
   r.ok('replan', 'no: keep floats and fix the rounding'); // the user said no to the plan: their new comment starts the re-plan again
-  r.no(/record the loop-breaker's prevent first/, 'approve', 'yes'); r.prevent('replan', '--targets', 'C1');
+  assert.equal(r.state().entry.prevent, null, 'the new comment owes a new prevent'); r.prevent('replan', '--targets', 'C1');
   r.ok('approve', 'yes'); r.ok('run', '--before', '--', 'node -e "process.exit(1)"');
   r.no(/commits from before the user approved[\s\S]*git reset --hard/, 'merge', early);
   const wt = path.join(r.d, br.match(/^worktree: (\S+)/m)[1]); spawnSync('git', ['reset', '-q', '--hard', r.state().base], { cwd: wt });
@@ -350,6 +355,8 @@ test('M: every state, level, role and route has its card; a missing, unbound or 
   assert.match(r.cg('check').out, /card "merge": front matter \(LOOP\/full\/root\) differs from flow\.json \(LOOP\/tiny\/root\)/);
   const mini = path.join(cards, 'mini-review.md'); fs.writeFileSync(mini, fs.readFileSync(mini, 'utf8').replace('route: FOCUSED', 'route: FULL'));
   assert.match(r.cg('check').out, /card "mini-review": front matter \(LOOP\/root\/FULL\) differs from flow\.json \(LOOP\/root\/FOCUSED\)/);
+  const flow = path.join(r.d, '.cheapgpt', 'flow.json'); fs.writeFileSync(flow, fs.readFileSync(flow, 'utf8').replace('"GATE": ["prune",', '"GATE": ["answer", "prune",'));
+  assert.match(r.cg('check').out, /prevent GATE: answer is not a command of GATE/);
 });
 
 test('M: each call writes its role card into the packet; the loop-breaker also gets the step back and the one-block', () => {
@@ -414,11 +421,23 @@ test('M: a task started on 1.10.0 (core and non-core stages) migrates on load an
   fs.writeFileSync(f, JSON.stringify(Object.fromEntries(KEYS.map((k) => [k, old[k]])), null, 2));
   assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(f, 'utf8'))), KEYS);
   assert.match(r.ok('status'), /STATE LOOP · FULL/);
-  const m = r.state(); assert.equal(m.version, '1.10.2'); assert.ok(!('stage' in m) && !('hard' in m) && !('coreLoops' in m) && !('adopt' in m));
+  const m = r.state(); assert.equal(m.version, '1.10.3'); assert.ok(!('stage' in m) && !('hard' in m) && !('coreLoops' in m) && !('adopt' in m));
   assert.match(m.notes.join('\n'), /adoption record \(before 1\.10\.2\): app\.js existed/);
-  assert.match(fs.readFileSync(path.join(r.d, 'cheapgpt', 'log.jsonl'), 'utf8'), /"ev":"migrate","from":"1\.10\.0","to":"1\.10\.2"/);
+  assert.match(fs.readFileSync(path.join(r.d, 'cheapgpt', 'log.jsonl'), 'utf8'), /"ev":"migrate","from":"1\.10\.0","to":"1\.10\.3"/);
   r.ok('advance', 'LOOP'); tiny(r, ['C2', 'C3'], ['C2', 'C3'], []);
   assert.equal(gate(r, ['C1', 'C2', 'C3']).history[2].outcome, 'PASS'); r.ok('advance', 'ACCEPT');
+});
+
+test('M: a task saved by 1.10.2 mid-gate continues without a prevent; the next state entry owes one', () => {
+  const r = repo(); planned(r); tiny(r, ['C1', 'C2', 'C3'], ['C1', 'C2', 'C3'], []);
+  r.ok('advance', 'GATE'); r.prevent(); r.ok('prune', 'none'); r.ok('run', '--e2e', '--', 'node -e 1');
+  const f = path.join(r.d, 'cheapgpt', 'state.json'), s = r.state(); // 1.10.2 had no prevent in GATE
+  s.version = '1.10.2'; s.entry.prevent = null; s.entry.block = null; delete s.entry.legacy; fs.writeFileSync(f, JSON.stringify(s, null, 2));
+  const rv = r.callId(r.ok('call', 'reviewer')); assert.equal(r.state().entry.legacy, true); assert.equal(r.state().version, '1.10.3');
+  r.reply(rv, r.met(['C1', 'C2', 'C3'])); r.ok('review', rv); r.ok('advance', 'ACCEPT');
+  const g = repo(); planned(g); // saved by 1.10.2 at the start of a loop: no prevent yet
+  const t = JSON.parse(fs.readFileSync(path.join(g.d, 'cheapgpt', 'state.json'), 'utf8')); t.version = '1.10.2'; fs.writeFileSync(path.join(g.d, 'cheapgpt', 'state.json'), JSON.stringify(t));
+  g.ok('status'); g.ok('advance', 'LOOP'); g.no(/PREVENT first: call builder in LOOP/, 'call', 'dynamic');
 });
 
 // ── the audit of this suite ──────────────────────────────────────────────────────────────

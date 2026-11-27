@@ -1,18 +1,18 @@
 {
-  "version": "1.10.2",
+  "version": "1.10.3",
   "start": { "new": "PLAN", "existing": "ADOPT" },
   "states": {
-    "ADOPT": { "next": ["PLAN"], "exit": ["baselineRun", "prevented"] },
+    "ADOPT": { "next": ["PLAN"], "exit": ["baselineRun"] },
     "PLAN": { "next": ["LOOP"], "exit": ["planValid", "planFrozen", "planReviewed"] },
-    "LOOP": { "next": ["LOOP", "GATE", "STOPPED"], "to": { "LOOP": ["planUnchanged", "loopReviewed"], "GATE": ["loopReviewed", "allEstablished"], "STOPPED": ["userStops"] } },
+    "LOOP": { "next": ["LOOP", "GATE", "STOPPED"], "to": { "LOOP": ["prevented", "planUnchanged", "loopReviewed"], "GATE": ["prevented", "loopReviewed", "allEstablished"], "STOPPED": ["userStops"] } },
     "GATE": { "next": ["LOOP", "ACCEPT"], "to": { "LOOP": ["gateSettled"], "ACCEPT": ["gatePassed"] } },
     "ACCEPT": { "next": ["DONE", "LOOP"], "exit": ["userAnswer"], "to": { "DONE": ["finalReport", "gatedHead"] } },
     "DONE": { "next": [], "terminal": true },
     "STOPPED": { "next": [], "terminal": true }
   },
   "commands": {
-    "stepback": ["ADOPT", "PLAN", "LOOP"],
-    "block": ["ADOPT", "PLAN", "LOOP"],
+    "stepback": ["ADOPT", "PLAN", "LOOP", "GATE"],
+    "block": ["ADOPT", "PLAN", "LOOP", "GATE"],
     "freeze": ["PLAN", "LOOP"],
     "planreview": ["PLAN"],
     "replan": ["LOOP"],
@@ -23,6 +23,7 @@
     "run --e2e": ["GATE"],
     "call reviewer": ["PLAN", "LOOP", "GATE"],
     "call builder": ["LOOP"],
+    "call breaker": ["LOOP"],
     "review": ["LOOP", "GATE"],
     "review mini": ["LOOP"],
     "prune": ["GATE"],
@@ -30,6 +31,12 @@
     "answer": ["ACCEPT"],
     "report --final": ["ACCEPT"],
     "clean": ["DONE", "STOPPED"]
+  },
+  "prevent": {
+    "ADOPT": ["run"],
+    "PLAN": ["freeze", "call reviewer"],
+    "LOOP": ["run", "run --before", "call builder", "merge", "review", "review mini", "approve"],
+    "GATE": ["prune", "run", "run --e2e", "call reviewer", "review"]
   },
   "levels": ["tiny", "full", "replan"],
   "ladder": {
@@ -61,6 +68,8 @@
     { "card": "review", "state": "LOOP", "role": "reviewer" },
     { "card": "review", "state": "GATE", "role": "reviewer" },
     { "card": "gate", "state": "GATE", "role": "root" },
+    { "card": "step-back", "state": "GATE", "role": "root" },
+    { "card": "one-block", "state": "GATE", "role": "root" },
     { "card": "accept", "state": "ACCEPT", "role": "root" },
     { "card": "done", "state": "DONE", "role": "root" },
     { "card": "stopped", "state": "STOPPED", "role": "root" }
