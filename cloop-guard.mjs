@@ -6,9 +6,9 @@ import path from "node:path";
 
 // catalog.harness -> [cheapGPT edition, matching cLoop edition]
 export const EDITION_PAIRS = {
-  codex: ["main", "codex"],
+  codex: ["codex", "codex"],
   "claude-exp": ["exp", "main"],
-  claude: ["claude-edition", "claude"],
+  claude: ["claude", "claude"],
 };
 
 const CLOOP_MARKER = "cloop:managed";

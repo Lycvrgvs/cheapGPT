@@ -1,16 +1,18 @@
 #!/usr/bin/env node
-// Generates profiles/roles.json, the published roles table that cLoop reads for its --builders option.
-// It is derived from the roles table (header "| Role | Model | Run as | Does |") of profiles/cheap.md and profiles/cheap-100.md.
+// Generates editions/<edition>/profiles/roles.json, the published roles table of each edition (cLoop reads it for
+// its --builders option). Each is derived from the roles table (header "| Role | Model | Run as | Does |") of that
+// edition's profiles/cheap.md and profiles/cheap-100.md.
 //
-//   node tools/roles.mjs           write profiles/roles.json
-//   node tools/roles.mjs --check   exit 1 if profiles/roles.json is out of date
+//   node tools/roles.mjs           write every edition's roles.json
+//   node tools/roles.mjs --check   exit 1 if any is out of date
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const EDITIONS = ["codex", "claude", "exp"];
 const PROFILES = ["cheap", "cheap-100"];
-const EDITION = { codex: "main", "claude-exp": "exp", claude: "claude-edition" };
+const EDITION = { codex: "codex", "claude-exp": "exp", claude: "claude" };
 
 export function parseRoles(profileText) {
   const lines = profileText.split("\n");
@@ -33,7 +35,7 @@ export function parseRoles(profileText) {
   });
 }
 
-export function buildRoles(root = ROOT) {
+export function buildRoles(root) { // root: an edition's folder, editions/<edition>
   const catalog = JSON.parse(readFileSync(path.join(root, "profiles", "catalog.json"), "utf8"));
   const harness = catalog.harness || "codex";
   const profiles = {};
@@ -45,25 +47,22 @@ export function buildRoles(root = ROOT) {
   return { schemaVersion: 1, package: "cheapGPT", version: catalog.packageVersion, edition: EDITION[harness], harness, profiles };
 }
 
-export function rolesText(root = ROOT) {
+export function rolesText(root) {
   return JSON.stringify(buildRoles(root), null, 2) + "\n";
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const file = path.join(ROOT, "profiles", "roles.json");
-  const text = rolesText();
-  if (process.argv.includes("--check")) {
-    let current = "";
-    try {
-      current = readFileSync(file, "utf8");
-    } catch {}
-    if (current !== text) {
-      process.stderr.write("profiles/roles.json is out of date; run node tools/roles.mjs\n");
-      process.exit(1);
+  let stale = 0;
+  for (const edition of EDITIONS) {
+    const rel = `editions/${edition}/profiles/roles.json`, file = path.join(ROOT, rel), text = rolesText(path.join(ROOT, "editions", edition));
+    if (process.argv.includes("--check")) {
+      let current = "";
+      try { current = readFileSync(file, "utf8"); } catch {}
+      if (current !== text) { process.stderr.write(`${rel} is out of date; run node tools/roles.mjs\n`); stale += 1; }
+    } else {
+      writeFileSync(file, text);
+      process.stdout.write(`wrote ${rel}\n`);
     }
-    process.stdout.write("roles.json OK\n");
-  } else {
-    writeFileSync(file, text);
-    process.stdout.write("wrote profiles/roles.json\n");
   }
+  if (process.argv.includes("--check")) { if (stale) process.exit(1); process.stdout.write("roles.json OK (every edition)\n"); }
 }

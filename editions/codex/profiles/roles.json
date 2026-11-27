@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "package": "cheapGPT",
-  "version": "1.10.3",
-  "edition": "main",
+  "version": "1.10.4",
+  "edition": "codex",
   "harness": "codex",
   "profiles": {
     "cheap": [
